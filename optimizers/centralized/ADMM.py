@@ -8,8 +8,8 @@ from .centralized_optimizer import CentralizedOptimizer
 class ADMM(CentralizedOptimizer):
     '''ADMM for consensus optimization described in http://www.princeton.edu/~yc5/ele522_optimization/lectures/ADMM.pdf'''
 
-    def __init__(self, p, n_iters=100, rho=0.1, x_0=None, W=None, local_n_iters=100, delta=None, local_optimizer='NAG', verbose=False):
-        super().__init__(p, n_iters, x_0, W, verbose)
+    def __init__(self, p, rho=0.1, local_n_iters=100, delta=None, local_optimizer='NAG', **kwargs):
+        super().__init__(p, **kwargs) 
         self.rho = rho
         self.local_optimizer = local_optimizer
         self.local_n_iters = local_n_iters
@@ -39,3 +39,4 @@ class ADMM(CentralizedOptimizer):
         for i in range(self.n_agent):
             self.Lambda[:, i] += self.rho * (x[:, i] - self.x)
         self.x = z # Update
+

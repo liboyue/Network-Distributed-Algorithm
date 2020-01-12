@@ -12,13 +12,13 @@ class Optimizer(object):
 
     def __init__(self, p, n_iters=100, x_0=None, W=None, verbose=False):
 
+        self.name = self.__class__.__name__
+
         self.x_0 = x_0
         self.n_iters = n_iters
         self.verbose = verbose
         if self.verbose == True:
             self.history = []
-
-        self.name = self.__class__.__name__
 
         self.p = p
         if hasattr(p, 'x_min'):

@@ -16,10 +16,12 @@ n_class = 10
 img_dim = 785
 n_hidden = 64
 lr = 20
+mu = 0.001
 
 n_iters = 20
 
 p = NN(n_agent, prob=0.3)
+
 dim = (n_hidden+1) * (img_dim + n_class)
 x_0 = np.random.randn(dim, n_agent) / 10
 W = generate_mixing_matrix(p.G)
@@ -27,21 +29,20 @@ W = generate_mixing_matrix(p.G)
 
 n_gd_iters = int(n_iters * 10)
 n_inner_iters = int(p.m * 0.01)
-batch_size = int(p.m / 100)
-n_dsgd_iters = int(n_iters * p.m / batch_size)
 
 centered_exps = [
-    GD(p, n_gd_iters, eta=1, x_0=x_0.mean(axis=1), verbose=True),
-    DANE(p, n_iters, eta=1, mu=0.01, x_0=x_0.mean(axis=1), local_n_iters=2, delta=1, verbose=True),
-    ADMM(p, n_iters, rho=1, x_0=x_0.mean(axis=1), delta=1, local_optimizer='GD', local_n_iters=10, verbose=True)
+    GD(p, n_iters=n_gd_iters, eta=1, x_0=x_0.mean(axis=1)),
+    DANE(p, n_iters=n_iters, eta=1, mu=0.01, x_0=x_0.mean(axis=1), local_n_iters=2, delta=1),
+    ADMM(p, n_iters=n_iters, rho=1, x_0=x_0.mean(axis=1), delta=1, local_optimizer='GD', local_n_iters=10)
     ]
 
 
 distributd_exps = [
-    DGD_tracking(p, n_gd_iters, eta=1, x_0=x_0, W=W, verbose=True),
-    EXTRA(p, n_gd_iters, eta=1, x_0=x_0, W=W, verbose=True),
-    NetworkSVRG(p, n_gd_iters, n_inner_iters, eta=0.1, x_0=x_0, W=W, opt=1, verbose=True),
-    NetworkDANE(p, n_iters, eta=1, mu=0.001, x_0=x_0, W=W, local_n_iters=10, delta=0.1, local_optimizer='GD', verbose=True),
+    DGD_tracking(p, n_iters=n_gd_iters, eta=1, x_0=x_0, W=W),
+    EXTRA(p, n_iters=n_gd_iters, eta=1, x_0=x_0, W=W),
+    NetworkSVRG(p, n_iters=n_gd_iters, n_inner_iters=n_inner_iters, eta=0.1, mu=mu, x_0=x_0, W=W, opt=1),
+    NetworkSARAH(p, n_iters=n_gd_iters, n_inner_iters=n_inner_iters, eta=0.1, mu=mu, x_0=x_0, W=W, opt=1),
+    NetworkDANE(p, n_iters=n_iters, eta=1, mu=mu, x_0=x_0, W=W, local_n_iters=10, delta=0.1, local_optimizer='GD'),
     ]
 
 exps = centered_exps + distributd_exps
@@ -54,8 +55,11 @@ end = time.time()
 print('Total ' + str(end-start) + 's')
 
 
+print("Initial accuracy = " + str(p.accuracy(x_0.mean(axis=1))))
+
 max_iter = max(n_iters, n_gd_iters) + 1
 table = np.zeros((max_iter, len(exps)*3))
+
 for k in range(len(exps)):
     opt = exps[k]
     res = opt.get_results()
@@ -74,21 +78,19 @@ x = np.array(range(n_iters+1)).reshape(-1, 1)
 
 plt.figure()
 for i in range(len(exps)):
-    plt.plot(x, table[:, i*3+1])
+    plt.plot(x, table[:, i*3+1][:len(x)])
 
 plt.title('Loss')
 plt.xlabel('#iters')
 plt.legend(legends)
-plt.savefig('figs/nn_iter_loss.eps', format='eps')
 
 plt.figure()
 for i in range(len(exps)):
-    plt.plot(x, table[:, i*3+2])
+    plt.plot(x, table[:, i*3+2][:len(x)])
 
 plt.title('Accuracy')
 plt.xlabel('#iters')
 plt.legend(legends)
-plt.savefig('figs/nn_iter_acc.eps', format='eps')
 
 plt.figure()
 for i in range(len(exps)):
@@ -97,7 +99,6 @@ for i in range(len(exps)):
 plt.title('Loss')
 plt.xlabel('#grad')
 plt.legend(legends)
-plt.savefig('figs/nn_grad_loss.eps', format='eps')
 
 plt.figure()
 for i in range(len(exps)):
@@ -106,6 +107,6 @@ for i in range(len(exps)):
 plt.title('Accuracy')
 plt.xlabel('#grad')
 plt.legend(legends)
-plt.savefig('figs/nn_grad_acc.eps', format='eps')
 
 plt.show()
+

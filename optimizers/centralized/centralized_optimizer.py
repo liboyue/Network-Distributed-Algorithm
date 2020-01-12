@@ -9,11 +9,10 @@ from ..utils import generate_mixing_matrix, eps, relative_error
 class CentralizedOptimizer(Optimizer):
     '''The base centralized optimizer class, which handles logging, convergence/divergence checking.'''
 
-    def __init__(self, p, n_iters=100, x_0=None, W=None, verbose=False):
+    def __init__(self, p, **kwargs):
 
-        x_0 = x_0 if x_0 is not None else np.random.rand(p.dim)
-        super().__init__(p, n_iters, x_0, W, verbose)
-
+        super().__init__(p, **kwargs)
+        self.x_0 = self.x_0 if self.x_0 is not None else np.random.rand(p.dim)
 
     def init(self):
         self.x = self.x_0

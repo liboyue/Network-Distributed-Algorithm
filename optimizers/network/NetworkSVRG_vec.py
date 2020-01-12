@@ -3,7 +3,7 @@
 import numpy as np
 from .network_optimizer import NetworkOptimizer
 
-class NetworkSVRG(NetworkOptimizer):
+class NetworkSVRG_vec(NetworkOptimizer):
     def __init__(self, p, n_inner_iters=100, eta=0.1, mu=0, opt=1, batch_size=1, **kwargs):
         super().__init__(p, **kwargs)
         self.eta = eta
@@ -11,6 +11,8 @@ class NetworkSVRG(NetworkOptimizer):
         self.mu = mu
         self.n_inner_iters = n_inner_iters
         self.batch_size = batch_size
+
+        self.k_list = np.zeros(self.batch_size)
 
     def local_update(self):
         for i in range(self.n_agent):
@@ -25,11 +27,8 @@ class NetworkSVRG(NetworkOptimizer):
 
             for _ in range(inner_iters):
                 u -= self.eta * v
-                v = 0
-                for j in range(self.batch_size):
-                    k = np.random.randint(self.m)
-                    v += self.grad(u, i, k) - self.grad(self.y[:, i], i, k) + self.mu * (u - self.y[:, i])
-                v /= self.batch_size
-                v += self.s[:, i]
+                k_list = np.random.randint(0, self.m[i], self.batch_size)
+                v = self.grad(u, i, k_list) - self.grad(self.y[:, i], i, k_list) \
+                        + self.mu * (u - self.y[:, i]) + self.s[:, i]
 
             self.x[:, i] = u

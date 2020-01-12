@@ -46,8 +46,10 @@ class LogisticRegression(Problem):
         Y_0[Y_0 > 0.5] = 1
         Y_0[Y_0 <= 0.5] = 0
 
+        
         noise = np.random.binomial(1, self.noise_ratio, (self.n_agent, self.m))
         self.Y = np.multiply(noise - Y_0, noise) + np.multiply(Y_0, 1 - noise)
+
 
         self.w_min = opt.minimize(
                 self.f,
@@ -59,7 +61,6 @@ class LogisticRegression(Problem):
 
         self.x_min = self.w_min
         self.f_min = self.f(self.x_min)
-
 
     def grad(self, w, i=None, j=None):
         '''Gradient at w. If i is None, returns the full gradient; if i is not None but j is, returns the gradient in the i-th machine; otherwise,return the gradient of j-th sample in i-th machine. '''
@@ -90,3 +91,27 @@ class LogisticRegression(Problem):
         else: # Return the gradient of sample j in machine i
             tmp = self.X[i, j, :].dot(w)
             return -((self.Y[i, j]-1) * tmp - np.log(1 + np.exp(-tmp))) + np.sum(w**2) * self.LAMBDA / 2
+
+if __name__ == '__main__':
+
+    import matplotlib.pyplot as plt
+
+    n = 10
+    m = 1000
+    dim = 10
+    noise_variance = 0.01
+
+    p = LogisticRegression(n, m, dim, noise_variance=noise_variance)
+    p.grad_check()
+    p.distributed_check()
+
+    p = LogisticRegression(n, m, dim, noise_variance=noise_variance, n_edges=4*n)
+    p.plot_graph()
+
+    print('w_min = ' + str(p.w_min))
+    print('f(w_min) = ' + str(p.f(p.w_min)))
+    print('f_0(w_min) = ' + str(p.f(p.w_min, 0)))
+    print('|| g(w_min) || = ' + str(np.linalg.norm(p.grad(p.w_min))))
+    print('|| g_0(w_min) || = ' + str(np.linalg.norm(p.grad(p.w_min, 0))))
+
+    plt.show()

@@ -18,10 +18,12 @@ dim = 40
 kappa = 10000
 kappa = 10
 
+
 n_iters = 200
 
 p = LinearRegression(n_agent, m, dim, noise_variance=1, kappa=kappa)
 x_0 = np.random.rand(dim, n_agent)
+
 
 eta = 2/(p.L + p.sigma)
 mu = 1
@@ -31,8 +33,8 @@ n_svrg_iters = 20 * n_iters
 
 def run(p, W, mu=0.01, dane_eta=1, svrg_eta=eta/40) :
     exps = [
-        NetworkDANE(p, n_iters, eta=dane_eta, mu=mu, x_0=x_0, W=W, verbose=False),
-        NetworkSVRG(p, n_svrg_iters, n_inner_iters, eta=svrg_eta, x_0=x_0, W=W, verbose=False)
+        NetworkDANE(p, n_iters=n_iters, eta=dane_eta, mu=mu, x_0=x_0, W=W, verbose=False),
+        NetworkSVRG(p, n_iters=n_svrg_iters, n_inner_iters=n_inner_iters, eta=svrg_eta, mu=mu, x_0=x_0, W=W, verbose=False)
         ]
 
     exps = multiprocess_run(2, exps)
@@ -40,8 +42,16 @@ def run(p, W, mu=0.01, dane_eta=1, svrg_eta=eta/40) :
 
 
 start = time.time()
-alpha_list = []
-results = []
+
+alpha_list = [0]
+
+dane = DANE(p, n_iters=n_iters, eta=1, mu=0.01, x_0=x_0.mean(axis=1))
+dane.optimize()
+
+svrg = SVRG(p, n_iters=n_svrg_iters, n_inner_iters=int(n_inner_iters*n_agent), eta=eta/15, x_0=x_0.mean(axis=1))
+svrg.optimize()
+
+results = [[dane, svrg]]
 
 
 # Erdos-Renyi random graph p=0.3
@@ -109,7 +119,8 @@ for i in range(len(results)):
     plt.loglog( res_svrg['n_grad'], res_svrg['func_error'], '--', color=colors[i] )
 
 
-legends = [alg + ', ' + topology for topology in ['ER(0.3)', 'Ring', 'Grid', 'Star'] for alg in ['Network-DANE', 'Network-SVRG']]
+
+legends = ['DANE', 'SVRG'] + [alg + ', ' + topology for topology in ['ER(0.3)', 'Ring', 'Grid', 'Star'] for alg in ['Network-DANE', 'Network-SVRG']]
 
 plt.figure(0)
 plt.xlabel('#iters')

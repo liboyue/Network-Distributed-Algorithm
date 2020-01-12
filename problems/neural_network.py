@@ -21,6 +21,8 @@ def softmax_loss(Y, score):
     return - np.sum(Y * np.log(score)) / Y.shape[1]
 
 
+
+
 class NN(Problem):
     '''f(w) = 1/n \sum l_i(w), where l_i(w) is the logistic loss'''
     
@@ -33,6 +35,7 @@ class NN(Problem):
         super().__init__(n, m, (n_hidden+1) * (img_dim + n_class), n_edges=n_edges, prob=prob)
 
         self.n_hidden = n_hidden # Number of neurons in hidden layer
+
 
         # Split training data into n agents
         self.m = int(X_train.shape[1] / self.n_agent)
@@ -146,3 +149,11 @@ class NN(Problem):
         labels = self.Y_test.argmax(axis=0)
 
         return sum(pred == labels) / len(pred)
+
+
+
+if __name__ == '__main__':
+
+    p = NN()
+
+

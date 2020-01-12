@@ -10,10 +10,20 @@ norm = np.linalg.norm
 class NetworkOptimizer(Optimizer):
     '''The base network optimizer class, which handles saving/plotting history.'''
 
+    def __init__(self, p, n_mix=1, n_grad_tracking_iters=None, **kwargs):
+        super().__init__(p, **kwargs)
+        self.n_mix = n_mix
+        self.n_grad_tracking_iters = n_grad_tracking_iters
+ 
     def init(self): # Note this is not the construction function __init__
         super().init()
         self.s = np.zeros((self.dim, self.n_agent))
         self.y = self.x_0.copy()
+
+        self.W = np.linalg.matrix_power(self.W, self.n_mix)
+        self.W_s = np.linalg.matrix_power(self.W_s, self.n_mix)
+
+
         for i in range(self.n_agent):
             self.s[:, i] = self.grad(self.y[:, i], i)
 
@@ -27,13 +37,24 @@ class NetworkOptimizer(Optimizer):
 
 
     def update(self):
-        self.n_comm[self.t] += self.n_edges
+        self.n_comm[self.t] += self.n_mix
 
         y_last = self.y.copy()
         self.y = self.x.dot(self.W)
         self.s = self.s.dot(self.W_s)
-        for i in range(self.n_agent):
-            self.s[:, i] += self.grad(self.y[:, i], i) - self.p.grad(y_last[:, i], i)
+        if self.n_grad_tracking_iters == None:
+            for i in range(self.n_agent):
+                # We can store the last gradient, so don't need to compute again
+                self.s[:, i] += self.grad(self.y[:, i], i) - self.p.grad(y_last[:, i], i)
+
+        else:
+            for i in range(self.n_agent):
+                tmp = 0
+                for _ in range(self.n_grad_tracking_iters):
+                    k = np.random.randint(self.m)
+                    # We need to compute the stochastic gradient everytime
+                    tmp += self.grad(self.y[:, i], i, k) - self.grad(y_last[:, i], i, k)
+                self.s[:, i] += tmp / self.n_grad_tracking_iters
 
         self.local_update()
 

@@ -6,18 +6,19 @@ from ..optimizer import Optimizer
 class DGD_tracking(Optimizer):
     '''The distributed gradient descent algorithm with gradient tracking, described in 'Harnessing Smoothness to Accelerate Distributed Optimization', Guannan Qu, Na Li'''
 
-    def __init__(self, p, n_iters=100, eta=0.1, x_0=None, W=None, auto_param_choosing=False, verbose=False):
-        super().__init__(p, n_iters, x_0, W, verbose)
+    def __init__(self, p, eta=None, **kwargs):
+        super().__init__(p, **kwargs)
 
-        if auto_param_choosing == True:
-            max_eig = np.linalg.norm(W - np.ones((self.n_agent, self.n_agent)) / self.n_agent)
+        if eta != None:
+            self.eta = eta
+        else:
+        # self.W = ( self.W + np.eye(self.n_agent) ) / 2
             if hasattr('sigma', p): # Strongly convex
-                eta = 2 / (p.L + p.sigma)
+                self.eta = 2 / (p.L + p.sigma)
             else:
-                eta = 1 / p.L
+                self.eta = 1 / p.L
 
-            print('DGD_tracking auto_param_choosing is on')
-            print('eta = ' + str(eta) + ', mu = ' + str(mu))
+            print('NetworkGD chose theoratical largest step size eta = ' + str(self.eta))
 
         self.eta = eta
 

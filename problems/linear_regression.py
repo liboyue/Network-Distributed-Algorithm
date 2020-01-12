@@ -49,6 +49,7 @@ class LinearRegression(Problem):
         self.w_min = np.linalg.solve(X_tmp.T.dot(X_tmp), X_tmp.T.dot(Y_tmp))
         self.x_min = self.w_min
 
+
         self.H_list = [self.X[i].T.dot(self.X[i]) / self.m for i in range(self.n_agent)]
         self.H = X_tmp.T.dot(X_tmp) / self.m / self.n_agent
         self.X_T_Y = X_tmp.T.dot(Y_tmp) / self.m / self.n_agent
@@ -86,3 +87,30 @@ class LinearRegression(Problem):
             return np.sum((self.Y[i, :] - self.X[i, :, :].dot(w))**2) / 2 / self.m
         else: # Return the function value in machine i
             return (self.Y[i, j] - self.X[i, j, :].dot(w))**2 / 2
+
+
+if __name__ == '__main__':
+
+    import matplotlib.pyplot as plt
+
+    n = 10
+    m = 1000
+    dim = 10
+    noise_variance = 0.01
+
+    p = LinearRegression(n, m, dim, noise_variance=noise_variance)
+    p.grad_check()
+    p.distributed_check()
+
+    p = LinearRegression(n, m, dim, noise_variance=noise_variance, n_edges=4*n)
+    p.plot_graph()
+
+    print('w_min = ' + str(p.w_min))
+    print('f(w_min) = ' + str(p.f(p.w_min)))
+    print('f_0(w_min) = ' + str(p.f(p.w_min, 0)))
+    print('|| g(w_min) || = ' + str(np.linalg.norm(p.grad(p.w_min))))
+    print('|| g_0(w_min) || = ' + str(np.linalg.norm(p.grad(p.w_min, 0))))
+
+    plt.show()
+
+

@@ -8,8 +8,8 @@ from .centralized_optimizer import CentralizedOptimizer
 class DANE(CentralizedOptimizer):
     '''The (inexact) DANE algorithm described in Communication Efficient Distributed Optimization using an Approximate Newton-type Method, https://arxiv.org/abs/1312.7853'''
 
-    def __init__(self, p, n_iters=100, eta=0.1, mu=0.1, x_0=None, W=None, local_n_iters=100, local_optimizer='NAG', delta=None, verbose=False):
-        super().__init__(p, n_iters, x_0, W, verbose)
+    def __init__(self, p, eta=0.1, mu=0.1, local_n_iters=100, local_optimizer='NAG', delta=None, **kwargs):
+        super().__init__(p, **kwargs)
         self.eta = eta
         self.mu = mu
         self.local_optimizer = local_optimizer

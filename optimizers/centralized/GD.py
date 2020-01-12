@@ -8,8 +8,8 @@ from .centralized_optimizer import CentralizedOptimizer
 class GD(CentralizedOptimizer):
     '''The vanilla GD'''
 
-    def __init__(self, p, n_iters=100, eta=0.1, x_0=None, verbose=False):
-        super().__init__(p, n_iters, x_0, None, verbose)
+    def __init__(self, p, eta=0.1, **kwargs):
+        super().__init__(p, **kwargs)
         self.eta = eta
 
 

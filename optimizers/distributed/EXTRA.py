@@ -6,8 +6,8 @@ from ..optimizer import Optimizer
 class EXTRA(Optimizer):
     '''EXTRA: AN EXACT FIRST-ORDER ALGORITHM FOR DECENTRALIZED CONSENSUS OPTIMIZATION, https://arxiv.org/pdf/1404.6264.pdf'''
 
-    def __init__(self, p, n_iters=100, eta=0.1, x_0=None, W=None, verbose=False):
-        super().__init__(p, n_iters, x_0, W, verbose)
+    def __init__(self, p, eta=0.1, **kwargs):
+        super().__init__(p, **kwargs)
         self.eta = eta
 
     # def init(self):
