@@ -1,11 +1,9 @@
 #!/usr/bin/env python
 # coding=utf-8
 import numpy as np
+from ..optimizer import Optimizer
 
-from .centralized_optimizer import CentralizedOptimizer
-
-
-class GD(CentralizedOptimizer):
+class GD(Optimizer):
     '''The vanilla GD'''
 
     def __init__(self, p, eta=0.1, **kwargs):
@@ -14,4 +12,4 @@ class GD(CentralizedOptimizer):
 
 
     def update(self):
-        self.x -= self.eta * self.grad(self.x)
+        self.x -= self.eta * self.grad_full(self.x)

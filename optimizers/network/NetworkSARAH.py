@@ -13,7 +13,7 @@ class NetworkSARAH(NetworkOptimizer):
         self.batch_size = batch_size
 
     def local_update(self):
-        for i in range(self.n_agent):
+        for i in range(self.p.n_agent):
             u = self.y[:, i].copy()
             v = self.s[:, i].copy()
 
@@ -26,11 +26,9 @@ class NetworkSARAH(NetworkOptimizer):
             for _ in range(inner_iters):
                 u_last = u.copy()
                 u -= self.eta * v
-                grad = 0
-                for j in range(self.batch_size):
-                    k = np.random.randint(self.m)
-                    grad += self.grad(u, i, k) - self.grad(u_last, i, k) + self.mu * (u - u_last)
-                grad /= self.batch_size
-                v += grad
+
+                k_list = np.random.randint(0, self.p.m[i], self.batch_size)
+                v += self.grad(u, i, k_list) - self.grad(u_last, i, k_list) \
+                        + self.mu * (u - self.y[:, i])
 
             self.x[:, i] = u

@@ -1,2 +1,4 @@
 cvxpy
+seaborn
+scipy
 networkx

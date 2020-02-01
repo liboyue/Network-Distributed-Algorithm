@@ -8,27 +8,60 @@ from scipy import optimize as opt
 class Problem(object):
     '''The base problem class, which generates the random problem and supports function value and gradient evaluation'''
 
-    def __init__(self, n_agent, m, dim, n_edges=None, prob=None):
+    def __init__(self, n_agent, m_mean, dim, n_edges=None, prob=None, balanced=True):
         self.n_agent = n_agent      # Number of agents
-        self.m = m                  # Number of data samples in each agent
+        self.m_mean = m_mean        # Average number of data samples in each agent
         self.dim = dim              # Dimension of the variable
         self.X = []                 # Data
         self.Y = []                 # Noisey label
         self.Y_0 = []               # Original label
-        self.w_0 = None             # The optimal varibal value
-        self.w_min = None           # The minimizer varibal value
+        self.x_0 = None             # The true varibal value
         # self.x_min = None           # The minimizer varibal value
-        self.f_min = None           # The optimal function value
+        # self.f_min = None           # The optimal function value
         self.L = None               # The smoothness constant
         self.sigma = 0              # The strong convexity constant
+        self.balanced = balanced    # Sample size is balanced over all agents or not
+        self.m_total = m_mean * n_agent # Total number of data samples of all agents
 
         if n_edges is not None:         # Generate radom connectivity graph
             self.generate_erdos_renyi_graph(2*self.n_agent / self.n_agent / (self.n_agent-1))
         elif prob is not None:
             self.generate_erdos_renyi_graph(prob)
 
+        # Generate the number of samples at each agent
+        if self.balanced == True:
+            self.m = np.ones(self.n_agent, dtype=int) * self.m_mean
+        else:
+            tmp = np.random.random(self.n_agent)
+            tmp *= self.m_total * 0.3 / tmp.sum()
+            tmp = tmp.astype(int) + int(self.m_mean * 0.7)
+
+            extra = self.m_total - tmp.sum()
+            i = 0
+            while extra > 0:
+                tmp[i] += 1
+                extra -= 1
+                i += 1
+                i %= self.n_agent
+
+            self.m = tmp
+
+
+    def get_item(self, key):
+        return self.__dict__[key]
+
+    def split_data(self, m, X):
+        '''Helper function to split data according to the number of training samples per agent.'''
+        cumsum = m.cumsum().astype(int).tolist()
+        inds = zip([0] + cumsum[:-1], cumsum)
+        return [ X[start:end] for (start, end) in inds ] # Return the reference of data, which is contiguous
+
     def grad(self, w, i=None, j=None):
-        '''Gradient at w. If i is None, returns the full gradient; if i is not None but j is, returns the gradient in the i-th machine; otherwise,return the gradient of j-th sample in i-th machine. '''
+        '''Gradient at w. If i is None, returns the full gradient; if i is not None but j is, returns the gradient in the i-th machine; otherwise,return the gradient of j-th sample in i-th machine.'''
+        pass
+
+    def grad_full(self, w, i=None):
+        '''Full gradient at w. If i is None, returns the full gradient; if i is not None, returns the gradient for the i-th sample in the whole dataset.'''
         pass
 
     def grad_vec(self, w):
@@ -70,12 +103,12 @@ class Problem(object):
         g = 0
         g_ij = 0
         for i in range(self.n_agent):
-            g += self.grad(w, i)
-            for j in range(self.m):
+            g += self.grad(w, i) * self.m_mean
+            for j in range(self.m[i]):
                 g_ij += self.grad(w, i, j)
 
-        g /= self.n_agent
-        g_ij /= self.n_agent * self.m
+        g /= self.m_total
+        g_ij /= self.m_total
         # print('g - 1/n \sum g_i = ' + str(np.linalg.norm(g - self.grad(w))))
         # print('g - 1/nm \sum g_ij = ' + str(np.linalg.norm(g_ij - self.grad(w))))
         if np.linalg.norm(g - self.grad(w)) > 1e-5:
@@ -88,12 +121,12 @@ class Problem(object):
         f = 0
         f_ij = 0
         for i in range(self.n_agent):
-            f += self.f(w, i)
-            for j in range(self.m):
+            f += self.f(w, i) * self.m_mean
+            for j in range(self.m[i]):
                 f_ij += self.f(w, i, j)
 
-        f /= self.n_agent
-        f_ij /= self.n_agent * self.m
+        f /= self.m_total
+        f_ij /= self.m_total
         # print('f - 1/n sum f_i = ' + str(np.abs(f - self.f(w))))
         # print('f - 1/nm sum f_ij = ' + str(np.abs(f_ij - self.f(w))))
         if np.abs(f - self.f(w)) > 1e-10:

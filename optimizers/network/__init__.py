@@ -1,11 +1,8 @@
 #!/usr/bin/env python
 # coding=utf-8
 
-from .NetworkDANE import NetworkDANE
-from .NetworkDANE_quadratic import NetworkDANE_quadratic
+from .network_optimizer import NetworkOptimizer
 
-from .NetworkGD import NetworkGD
+from .NetworkDANE import NetworkDANE
 from .NetworkSARAH import NetworkSARAH
-from .NetworkSARAH_vec import NetworkSARAH_vec
 from .NetworkSVRG import NetworkSVRG
-from .NetworkSVRG_vec import NetworkSVRG_vec

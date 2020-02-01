@@ -12,81 +12,106 @@ def LINE_STYLES():
         line+color for line in ['-', '--', ':'] for color in ['k', 'r', 'b', 'c', 'y', 'g']
         ])
 
+
 def multi_process_helper(opt):
     start = time.time()
     print(opt.get_name() + ' started')
-    _ = opt.optimize()
+    opt.optimize()
     end = time.time()
     print(opt.get_name() + ' done, total {:.2f}s'.format(end-start))
     return opt
 
 
-def multiprocess_run(n, exps):
-    with Pool(n) as pool:
-        exps = pool.map(multi_process_helper, exps)
-    return exps
+def run_exp(exps, kappa=None, max_iter=None, name=None, save=False, plot=True, n_process=1, verbose=False):
 
-
-def run_exp_centralized(exps, kappa=None, max_iter=None, name=None):
-
-    with Pool(len(exps)) as pool:
-        res = pool.map(multi_process_helper, exps)
-
-    plot_results_centralized(
-            [x.get_results() for x in res],
-            [x.get_name() for x in res],
-            kappa=kappa,
-            max_iter=max_iter,
-            name=name
-            )
-
-    return res
-
-
-def run_exp(exps, kappa=None, max_iter=None, name=None, plot=True, legend=None, parallel=True):
-
-    if parallel:
-        with Pool(6) as pool:
+    if n_process > 1:
+        with Pool(n_process) as pool:
             res = pool.map(multi_process_helper, exps)
     else:
-        for exp in exps:
-            exp = multi_process_helper(exp)
-        res = exps
+        res = [multi_process_helper(exp) for exp in exps]
 
-    for x in res:
-        if x.verbose == True:
+    if verbose == True:
+        for x in res:
             x.plot_history()
 
     if plot == True:
-        if legend is None:
-            legend = [x.get_name() for x in res]
         plot_results(
-                [x.get_results() for x in res],
-                legend,
+                res,
                 kappa=kappa,
                 max_iter=max_iter,
-                name=name
+                name=name,
+                save=save,
                 )
+
+    if save == True: # Save data files too
+        # Save to txt file
+        for x in res:
+
+            if kappa is not None:
+                fname = r'data/' + str(name) + '_kappa_' + str(int(kappa))
+            else:
+                fname = r'data/' + str(name)
+
+            if hasattr(x, 'n_mix'):
+                fname += '_mix_' + str(x.n_mix) + '_' + x.get_name() + '.txt'
+            else:
+                fname += '_mix_1_' + x.get_name() + '.txt'
+
+            y = x.get_results()
+            if 'n_comm' in y:
+                tmp = [
+                        list(range(1, len(y['var_error'])+1)),
+                        y['var_error'],
+                        y['func_error'],
+                        y['n_comm'],
+                        y['n_grad']
+                        ]
+            else:
+                tmp = [
+                        list(range(1, len(y['var_error'])+1)),
+                        y['var_error'],
+                        y['func_error'],
+                        np.zeros(len(y['var_error'])),
+                        y['n_grad']
+                        ]
+
+            tmp = np.array(tmp).T
+            np.savetxt(fname, tmp, delimiter='    ')
+
+            with open(fname, 'r') as f:
+                content = f.read()
+
+            with open(fname, 'w') as f:
+                f.write("iter    var_error    func_error    n_comm    n_grad\n" + content)
 
     return res
 
 
-def plot_results(results, legend, kappa=None, max_iter=None, name=None):
+def plot_results(res, kappa=None, max_iter=None, name=None, save=False):
+
+
+    if kappa is not None:
+        fig_path = r'figs/' + str(name) + '_kappa_' + str(int(kappa))
+    else:
+        fig_path = r'figs/' + str(name)
+
+    full_legend = [x.get_name() for x in res]
+    full_res = [x.get_results() for x in res]
 
     if max_iter == None:
-        max_iter = max([len(res['var_error']) for res in results]) 
+        max_iter = max([len(x['var_error']) for x in full_res]) 
 
-    plot_iters(results, legend, kappa=kappa, max_iter=max_iter, name=name)
-    plot_comms(results, legend, kappa=kappa, max_iter=max_iter, name=name)
-    plot_grads(results, legend, kappa=kappa, max_iter=max_iter, name=name)
-
-
-def plot_results_centralized(results, legend, kappa=None, max_iter=None, name=None):
-    plot_iters(results, legend, kappa=kappa, max_iter=max_iter, name=name)
-    plot_grads(results, legend, kappa=kappa, max_iter=max_iter, name=name)
+    plot_iters(full_res, full_legend, fig_path, kappa=kappa, max_iter=max_iter, save=save)
+    plot_grads(full_res, full_legend, fig_path, kappa=kappa, max_iter=max_iter, save=save)
 
 
-def plot_iters(results, legend, kappa=None, max_iter=None, name=None):
+    partial_legend = [x.get_name() for x in res if 'n_comm' in x.get_results()]
+    partial_res = [x.get_results() for x in res if 'n_comm' in x.get_results()]
+
+    plot_comms(partial_res, partial_legend, fig_path, kappa=kappa, max_iter=max_iter, save=save)
+
+
+def plot_iters(results, legend, path, kappa=None, max_iter=None, save=False):
     plt.figure()
 
     for res, style in zip(results, LINE_STYLES()):
@@ -97,6 +122,9 @@ def plot_iters(results, legend, kappa=None, max_iter=None, name=None):
     if kappa is not None:
         plt.title(r"$\kappa$ = " + str(int(kappa)))
     plt.legend(legend)
+    if save == True:
+        plt.savefig(path + '_var_iter.eps', format='eps')
+    
 
     plt.figure()
     for res, style in zip(results, LINE_STYLES()):
@@ -107,9 +135,11 @@ def plot_iters(results, legend, kappa=None, max_iter=None, name=None):
     if kappa is not None:
         plt.title(r"$\kappa$ = " + str(int(kappa)))
     plt.legend(legend)
+    if save == True:
+        plt.savefig(path + '_fval_iter.eps', format='eps')
 
 
-def plot_comms(results, legend, kappa=None, max_iter=None, name=None):
+def plot_comms(results, legend, path, kappa=None, max_iter=None, save=False):
     plt.figure()
     for res, style in zip(results, LINE_STYLES()):
         plt.semilogy(res['n_comm'][:max_iter], res['var_error'][:max_iter], style)
@@ -119,6 +149,8 @@ def plot_comms(results, legend, kappa=None, max_iter=None, name=None):
     if kappa is not None:
         plt.title(r"$\kappa$ = " + str(int(kappa)))
     plt.legend(legend)
+    if save == True:
+        plt.savefig(path + '_var_comm.eps', format='eps')
 
 
     plt.figure()
@@ -131,9 +163,11 @@ def plot_comms(results, legend, kappa=None, max_iter=None, name=None):
     if kappa is not None:
         plt.title(r"$\kappa$ = " + str(int(kappa)))
     plt.legend(legend)
+    if save == True:
+        plt.savefig(path + '_fval_comm.eps', format='eps')
 
 
-def plot_grads(results, legend, kappa=None, max_iter=None, name=None):
+def plot_grads(results, legend, path, kappa=None, max_iter=None, save=False):
     plt.figure()
 
     for res, style in zip(results, LINE_STYLES()):
@@ -144,6 +178,8 @@ def plot_grads(results, legend, kappa=None, max_iter=None, name=None):
     if kappa is not None:
         plt.title(r"$\kappa$ = " + str(int(kappa)))
     plt.legend(legend)
+    if save == True:
+        plt.savefig(path + '_var_grads.eps', format='eps')
 
 
     plt.figure()
@@ -156,3 +192,5 @@ def plot_grads(results, legend, kappa=None, max_iter=None, name=None):
     if kappa is not None:
         plt.title(r"$\kappa$ = " + str(int(kappa)))
     plt.legend(legend)
+    if save == True:
+        plt.savefig(path + '_fval_grads.eps', format='eps')

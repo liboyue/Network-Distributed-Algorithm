@@ -2,7 +2,8 @@
 # coding=utf-8
 import numpy as np
 from numpy.linalg import norm
-from .utils import generate_mixing_matrix, eps
+
+from .utils import eps
 
 def relative_error(w, w_0):
     return norm(w - w_0) / norm(w_0)
@@ -14,43 +15,27 @@ class Optimizer(object):
 
         self.name = self.__class__.__name__
 
-        self.x_0 = x_0
+        if x_0 is not None:
+            if x_0.ndim == 1:
+                self.x_0 = x_0
+            else:
+                self.x_0 = x_0.mean(axis=1)
+        else:
+            self.x_0 = np.random.rand(self.p.dim)
+
         self.n_iters = n_iters
         self.verbose = verbose
-        if self.verbose == True:
-            self.history = []
+        self.history = []
 
         self.p = p
-        if hasattr(p, 'x_min'):
-            self.x_min = p.x_min
-        self.n_agent = p.n_agent
-        self.m = p.m
-        self.dim = p.dim
-        if hasattr(p, 'n_edges'):
-            self.n_edges = p.n_edges
-        self.L = p.L
-        self.sigma = p.sigma
 
         self.t = 0
+        self.x = self.x_0.copy()
 
-        self.x = None
-        self.s = None
-
-        self.n_comm = np.zeros(self.n_iters+1)
         self.n_grad = np.zeros(self.n_iters+1)
         self.func_error = np.zeros(self.n_iters+1)
         self.var_error = np.zeros(self.n_iters+1)
 
-        if hasattr(p, 'G'):
-            if W is None:
-                self.W = generate_mixing_matrix(p.G)
-            else:
-                self.W = W
-
-            W_min_diag = min(np.diag(self.W))
-            tmp = (1 - 1e-1) / (1 - W_min_diag)
-            self.W_s = self.W*tmp + np.eye(self.n_agent)*(1 - tmp)
-        
 
     def f(self, w, i=None, j=None):
         return self.p.f(w, i, j)
@@ -59,14 +44,31 @@ class Optimizer(object):
     def grad(self, w, i=None, j=None):
         '''Gradient wrapper. Provide logging function.'''
 
-        if (i == None): # The full gradient
-            self.n_grad[self.t] += self.n_agent * self.m
-        elif j == None: # The gradient in machine i
-            self.n_grad[self.t] += self.m
-        else: # Return the gradient of sample j in machine i
-            self.n_grad[self.t] += 1
+        if i is None: # The full gradient
+            self.n_grad[self.t] += self.p.m_total
+        elif j is None: # The gradient at machine i
+            self.n_grad[self.t] += self.p.m[i]
+        else: # Return the gradient of sample j at machine i
+            if type(j) is np.ndarray:
+                self.n_grad[self.t] += len(j)
+            else:
+                self.n_grad[self.t] += 1
 
         return self.p.grad(w, i, j)
+
+
+    def grad_full(self, w, i=None):
+        '''Gradient wrapper. Provide logging function.'''
+
+        if i is None: # The full gradient
+            self.n_grad[self.t] += self.p.m_total
+        else:
+            if type(i) is np.ndarray:
+                self.n_grad[self.t] += len(i)
+            else:
+                self.n_grad[self.t] += 1
+
+        return self.p.grad_full(w, i)
 
 
     def hessian(self, w, i=None, j=None):
@@ -74,24 +76,18 @@ class Optimizer(object):
  
 
     def init(self):
-        if self.x_0 is None:
-            self.x_0 = np.random.rand(self.dim, self.n_agent)
-        self.x = self.x_0.copy()
+        pass
+
 
     def save_metric(self):
-        self.func_error[self.t] = (self.f(self.x.mean(axis=1)) - self.f(self.x_min)) / self.f(self.x_min)
-        self.var_error[self.t] = relative_error(self.x.mean(axis=1), self.x_min)
+        self.func_error[self.t] = (self.f(self.x) - self.p.f_min) / self.p.f_min
+        self.var_error[self.t] = relative_error(self.x, self.p.x_min)
 
 
     def save_history(self):
-        if len(self.x.shape) == 1:
-            self.history.append({
-                'x': self.x.copy()
-                })
-        else:
-            self.history.append({
-                'x': self.x.mean(axis=1).copy()
-                })
+        self.history.append({
+            'x': self.x.copy()
+            })
 
 
     def plot_history(self):
@@ -99,13 +95,18 @@ class Optimizer(object):
 
 
     def get_results(self):
-        return {
-                'x': self.x.mean(axis=1),
+
+        res = {
+                'x': self.x,
                 'var_error': self.var_error[:self.t+1],
                 'func_error': self.func_error[:self.t+1],
-                'n_comm': self.n_comm[:self.t+1],
-                'n_grad': self.n_grad[:self.t+1] / self.p.m / self.p.n_agent
+                'n_grad': self.n_grad[:self.t+1] / self.p.m_total
                 }
+
+        if self.verbose == True:
+            res['history'] = self.history
+
+        return res
 
 
     def get_name(self):
@@ -116,7 +117,7 @@ class Optimizer(object):
         self.init()
 
         # Initial value
-        if hasattr(self, 'x_min'):
+        if hasattr(self.p, 'x_min'):
             self.save_metric()
 
         if self.verbose == True:
@@ -125,18 +126,19 @@ class Optimizer(object):
 
         for self.t in range(1, self.n_iters+1):
 
+            # Initialized every iteration
+            self.init_iter()
+
+            # The actual update step for optimization variable
             self.update()
 
-            self.n_comm[self.t] += self.n_comm[self.t-1]
-            self.n_grad[self.t] += self.n_grad[self.t-1]
-
-            if hasattr(self, 'x_min'):
+            if hasattr(self.p, 'x_min'):
                 self.save_metric()
 
             if self.verbose == True:
                 self.save_history()
 
-            if hasattr(self, 'x_min') and self.convergence_check() == True:
+            if hasattr(self.p, 'x_min') and self.convergence_check() == True:
                 break
 
         # endfor
@@ -144,13 +146,16 @@ class Optimizer(object):
         return self.get_results()
 
 
+    def init_iter(self):
+            self.n_grad[self.t] += self.n_grad[self.t-1]
+
     def convergence_check(self):
         ''' Convergence check'''
 
-        if norm(self.p.grad(self.x.mean(axis=1))) < eps:
+        if norm(self.p.grad(self.x)) < eps:
             return True
 
-        if norm(self.x.mean(axis=1) - self.x_min) > 5e1:
+        if norm(self.x - self.p.x_min) > 5e1:
             return True
 
 

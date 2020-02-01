@@ -3,37 +3,36 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-from ..optimizer import Optimizer
+from ..decentralized_distributed import DecentralizedOptimizer
 
 norm = np.linalg.norm
 
-class NetworkOptimizer(Optimizer):
+class NetworkOptimizer(DecentralizedOptimizer):
     '''The base network optimizer class, which handles saving/plotting history.'''
 
-    def __init__(self, p, n_mix=1, n_grad_tracking_iters=None, **kwargs):
+    def __init__(self, p, n_mix=1, grad_tracking_batch_size=None, **kwargs):
         super().__init__(p, **kwargs)
         self.n_mix = n_mix
-        self.n_grad_tracking_iters = n_grad_tracking_iters
+        self.grad_tracking_batch_size = grad_tracking_batch_size
  
-    def init(self): # Note this is not the construction function __init__
-        super().init()
-        self.s = np.zeros((self.dim, self.n_agent))
-        self.y = self.x_0.copy()
-
+        # Equivalent mixing matrices after n_mix rounds of mixng
         self.W = np.linalg.matrix_power(self.W, self.n_mix)
         self.W_s = np.linalg.matrix_power(self.W_s, self.n_mix)
 
-
-        for i in range(self.n_agent):
+        self.y = self.x_0.copy()
+        self.s = np.zeros((self.p.dim, self.p.n_agent))
+        for i in range(self.p.n_agent):
             self.s[:, i] = self.grad(self.y[:, i], i)
 
+        self.grad_last = self.s.copy()
 
-    # def save_history(self):
-        # self.history.append({
-            # 'x': self.x.mean(axis=1).copy(), 
-            # 'y': self.y.copy(), 
-            # 's': self.s.copy()
-            # })
+
+    def save_history(self):
+        self.history.append({
+            'x': self.x.copy(), 
+            'y': self.y.copy(), 
+            's': self.s.copy()
+            })
 
 
     def update(self):
@@ -42,30 +41,32 @@ class NetworkOptimizer(Optimizer):
         y_last = self.y.copy()
         self.y = self.x.dot(self.W)
         self.s = self.s.dot(self.W_s)
-        if self.n_grad_tracking_iters == None:
-            for i in range(self.n_agent):
-                # We can store the last gradient, so don't need to compute again
-                self.s[:, i] += self.grad(self.y[:, i], i) - self.p.grad(y_last[:, i], i)
+        if self.grad_tracking_batch_size is None:
+            # We can store the last gradient, so don't need to compute again
+            self.s -= self.grad_last
+            for i in range(self.p.n_agent):
+                self.grad_last[:, i] = self.grad(self.y[:, i], i)
+            self.s += self.grad_last
 
         else:
-            for i in range(self.n_agent):
-                tmp = 0
-                for _ in range(self.n_grad_tracking_iters):
-                    k = np.random.randint(self.m)
-                    # We need to compute the stochastic gradient everytime
-                    tmp += self.grad(self.y[:, i], i, k) - self.grad(y_last[:, i], i, k)
-                self.s[:, i] += tmp / self.n_grad_tracking_iters
+            for i in range(self.p.n_agent):
+                # We need to compute the stochastic gradient everytime
+                k_list = np.random.randint(0, self.p.m[i], self.grad_tracking_batch_size)
+                self.s[:, i] += self.grad(self.y[:, i], i, k_list) - self.grad(y_last[:, i], i, k_list)
 
         self.local_update()
 
 
     def plot_history(self):
 
+        if ~hasattr(self, 'x_min'):
+            return
+
         p = self.p
         hist = self.history
 
         x_min = p.x_min
-        f_min = p.f(x_min)
+        f_min = p.f_min
 
         plt.figure()
         legends = []
@@ -240,5 +241,5 @@ class NetworkOptimizer(Optimizer):
 
         plt.xlabel('#iters')
         plt.ylabel('Distance')
-        plt.title('Details of ' + self.name + ', L=' + str(self.L) + r', $\sigma$=' + str(self.sigma) )
+        plt.title('Details of ' + self.name + ', L=' + str(self.p.L) + r', $\sigma$=' + str(self.p.sigma) )
         plt.legend(legends)

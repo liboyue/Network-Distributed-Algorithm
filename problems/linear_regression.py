@@ -6,87 +6,104 @@ from .problem import Problem
 class LinearRegression(Problem):
     '''f(w) = 1/n \sum f_i(w) = 1/n \sum 1/2m || Y_i - X_i w ||^2'''
     
-    def __init__(self, n_agent, m, dim, noise_variance=0.1, kappa=10, n_edges=None, prob=None):
+    def __init__(self, n_agent, m_mean, dim, noise_variance=0.1, kappa=10, **kwargs):
 
-        super().__init__(n_agent, m, dim, n_edges=n_edges, prob=prob)
+        super().__init__(n_agent, m_mean, dim, **kwargs)
 
         self.noise_variance = noise_variance
         self.kappa = kappa
 
-        def _generate_x(kappa):
-            '''Helper function to generate data''' 
-            power = - np.log(kappa) / np.log(self.dim) / 2
+        # Generate X
+        self.X_total, self.L, self.sigma, self.S = self.generate_x(self.m_total, self.dim, self.kappa)
 
-            X = np.random.randn(self.n_agent, self.m, self.dim)
-            S = np.power(np.arange(self.dim)+1, power)
-            X_ = X.reshape(-1, self.dim)
-            X_ *= S
-            X = X_.reshape(self.n_agent, self.m, self.dim)
-            max_norm = 0
-            min_norm = np.linalg.norm(X[0].T.dot(X[0]) / self.m, 2)
-            for i in range(self.n_agent):
-                max_norm = max(
-                        np.linalg.norm(X[i].T.dot(X[i]) / self.m, 2),
-                        max_norm
-                        )
-                min_norm = min(
-                        np.linalg.norm(X[i].T.dot(X[i]) / self.m, -2),
-                        min_norm
-                        )
+        # Generate Y and the optimal solution
+        self.x_0 = self.w_0 = np.random.rand(self.dim)
+        self.Y_0_total = self.X_total.dot(self.w_0)
+        self.Y_total = self.Y_0_total + np.sqrt(self.noise_variance) * np.random.randn(self.m_total)
+        self.x_min = self.w_min = np.linalg.solve(self.X_total.T.dot(self.X_total), self.X_total.T.dot(self.Y_total))
+        self.f_min = self.f(self.x_min)
 
-            X /= max_norm
-            return X, 1, dim**(2*power) / max_norm
-
-        # Generate the problem
-        self.X, self.L, self.sigma = _generate_x(kappa)
-
-        self.w_0 = np.random.rand(self.dim)
-        self.Y_0 = self.X.dot(self.w_0)
-        self.Y = self.Y_0 + self.noise_variance * np.random.randn(n_agent, m)
-
-        X_tmp = self.X.reshape(-1, self.dim)
-        Y_tmp = self.Y.reshape(-1)
-        self.w_min = np.linalg.solve(X_tmp.T.dot(X_tmp), X_tmp.T.dot(Y_tmp))
-        self.x_min = self.w_min
+        # Split data
+        self.X = self.split_data(self.m, self.X_total)
+        self.Y = self.split_data(self.m, self.Y_total)
 
 
-        self.H_list = [self.X[i].T.dot(self.X[i]) / self.m for i in range(self.n_agent)]
-        self.H = X_tmp.T.dot(X_tmp) / self.m / self.n_agent
-        self.X_T_Y = X_tmp.T.dot(Y_tmp) / self.m / self.n_agent
-        self.X_T_Y_list = [self.X[i, :, :].T.dot(self.Y[i, :]) / self.m for i in range(self.n_agent)]
+        # Pre-calculate matrix products to accelerate gradient and function value evaluations
+        self.H = self.X_total.T.dot(self.X_total) / self.m_total
+        self.H_list = np.array([self.X[i].T.dot(self.X[i]) / self.m_mean for i in range(self.n_agent)])
+        # self.H_list = np.array([self.X[i].T.dot(self.X[i]) / self.m[i] for i in range(self.n_agent)])
+        self.X_T_Y = self.X_total.T.dot(self.Y_total) / self.m_total
+        # self.X_T_Y_list = np.array([self.X[i].T.dot(self.Y[i]) / self.m[i] for i in range(self.n_agent)])
+        self.X_T_Y_list = np.array([self.X[i].T.dot(self.Y[i]) / self.m_mean for i in range(self.n_agent)])
+
+        print('beta = ' + str(max([np.linalg.norm(Hi - self.H, 2) for Hi in self.H_list])) )
+
+
+    def generate_x(self, n_samples, dim, kappa):
+        '''Helper function to generate data''' 
+
+        powers = - np.log(kappa) / np.log(dim) / 2
+
+        S = np.power(np.arange(dim)+1, powers)
+        X = np.random.randn(n_samples, dim) # Random standard Gaussian data
+        X *= S                              # Conditioning
+        X_list = self.split_data(self.m, X)
+
+        max_norm = max([np.linalg.norm(X_list[i].T.dot(X_list[i]), 2) / X_list[i].shape[0] for i in range(self.n_agent)])
+        X /= max_norm
+
+        return X, 1, 1/kappa, np.diag(S)
 
 
     def grad(self, w, i=None, j=None):
-        '''Gradient at w. If i is None, returns the full gradient; if i is not None but j is, returns the gradient in the i-th machine; otherwise,return the gradient of j-th sample in i-th machine. '''
+        '''Gradient at w. If i is None, returns the full gradient; if i is not None but j is, returns the gradient at the i-th machine; otherwise,return the gradient of j-th sample in i-th machine. Note i can be a vector if j is None, j can also be a vector.'''
 
-        if (i == None): # Return the full gradient
+        if i is None: # Return the full gradient
             return self.H.dot(w) - self.X_T_Y
-        elif j == None: # Return the gradient in machine i
-                return self.H_list[i].dot(w) - self.X_T_Y_list[i]
-        else: # Return the gradient of sample j in machine i
-                return (self.X[i, j, :].T.dot(w) - self.Y[i, j]) * self.X[i, j, :]
+        elif j is None: # Return the gradient at machine i
+            return self.H_list[i].dot(w) - self.X_T_Y_list[i]
+        else: # Return the gradient of sample j at machine i
+            if type(j) is np.ndarray:
+                return (self.X[i][j].dot(w) - self.Y[i][j]).dot(self.X[i][j]) / len(j)
+            else:
+                return (self.X[i][j].dot(w) - self.Y[i][j]) * self.X[i][j]
+
+
+    def grad_full(self, w, i=None):
+        '''Full gradient at w. If i is None, returns the full gradient; if i is not None, returns the gradient for the i-th sample in the whole dataset.'''
+
+        if i is None: # Return the full gradient
+            return self.H.dot(w) - self.X_T_Y
+        else: # Return the gradient of sample i
+            if type(i) is np.ndarray:
+                return (self.X_total[i].dot(w) - self.Y_total[i]).dot(self.X_total[i]) / len(i)
+            else:
+                return (self.X_total[i].dot(w) - self.Y_total[i]) * self.X_total[i]
+
+
 
     def hessian(self, w=None, i=None, j=None):
         '''Hessian matrix at w. If i is None, returns the full Hessian matrix; if i is not None but j is, returns the hessian matrix in the i-th machine; otherwise,return the hessian matrix of j-th sample in i-th machine.'''
 
-        if i == None: # Return the full hessian matrix
+        if i is None: # Return the full hessian matrix
             return self.H
-        elif j == None: # Return the hessian matrix in machine i
+        elif j is None: # Return the hessian matrix at machine i
             return self.H_list[i]
-        else: # Return the hessian matrix of sample j in machine i
-            return self.X[np.newaxis, i, j, :].T.dot(self.X[np.newaxis, i, j, :])
+        else: # Return the hessian matrix of sample j at machine i
+            return self.X[i][np.newaxis, j, :].T.dot(self.X[i][np.newaxis, j, :])
 
 
     def f(self, w, i=None, j=None):
         '''Function value at w. If i is None, returns f(x); if i is not None but j is, returns the function value in the i-th machine; otherwise,return the function value of j-th sample in i-th machine.'''
 
-        if i == None: # Return the function value
-            Z = np.sqrt(2 * self.n_agent * self.m)
-            return np.sum((self.Y/Z - (self.X/Z).dot(w))**2)
-        elif j == None: # Return the function value in machine i
-            return np.sum((self.Y[i, :] - self.X[i, :, :].dot(w))**2) / 2 / self.m
-        else: # Return the function value in machine i
-            return (self.Y[i, j] - self.X[i, j, :].dot(w))**2 / 2
+        if i is None: # Return the function value
+            Z = np.sqrt(2 * self.m_total)
+            return np.sum((self.Y_total/Z - (self.X_total/Z).dot(w))**2)
+        elif j is None: # Return the function value at machine i
+            # return np.sum( (self.Y[i] - self.X[i].dot(w))**2 ) / 2 / self.m[i]
+            return np.sum( (self.Y[i] - self.X[i].dot(w))**2 ) / 2 / self.m_mean
+        else: # Return the function value of sample j at machine i
+            return np.sum( (self.Y[i][j] - self.X[i][j].dot(w))**2 ) / 2
 
 
 if __name__ == '__main__':
@@ -98,11 +115,12 @@ if __name__ == '__main__':
     dim = 10
     noise_variance = 0.01
 
-    p = LinearRegression(n, m, dim, noise_variance=noise_variance)
+    p = LinearRegression(n, m, dim, noise_variance=noise_variance, n_edges=4*n, balanced=False)
+    print(p.m)
     p.grad_check()
     p.distributed_check()
 
-    p = LinearRegression(n, m, dim, noise_variance=noise_variance, n_edges=4*n)
+    # p = LinearRegression(n, m, dim, noise_variance=noise_variance, n_edges=4*n)
     p.plot_graph()
 
     print('w_min = ' + str(p.w_min))

@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # coding=utf-8
 import numpy as np
+
 from ..utils import NAG, GD
 from .network_optimizer import NetworkOptimizer
 
@@ -16,17 +17,17 @@ class NetworkDANE(NetworkOptimizer):
 
     def local_update(self):
 
-        for i in range(self.n_agent):
+        for i in range(self.p.n_agent):
 
             grad_y = self.p.grad(self.y[:, i], i)
 
             def _grad(tmp):
                 return self.grad(tmp, i) - grad_y + self.s[:, i] + self.mu * (tmp - self.y[:, i])
 
-            if self.local_optimizer == "NAG":
-                self.x[:, i], count = NAG(_grad, self.y[:, i].copy(), self.L + self.mu, self.sigma + self.mu, self.local_n_iters)
+            if self.local_optimizer == 'NAG':
+                self.x[:, i], count = NAG(_grad, self.y[:, i].copy(), self.p.L + self.mu, self.p.sigma + self.mu, self.local_n_iters)
             else:
                 if self.delta is not None:
                     self.x[:, i], count = GD(_grad, self.y[:, i].copy(), self.delta, self.local_n_iters)
                 else:
-                    self.x[:, i], count = GD(_grad, self.y[:, i].copy(), 2/(self.L + self.mu + self.sigma + self.mu), self.local_n_iters)
+                    self.x[:, i], count = GD(_grad, self.y[:, i].copy(), 2/(self.p.L + self.mu + self.p.sigma + self.mu), self.local_n_iters)
