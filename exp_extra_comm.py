@@ -27,8 +27,9 @@ while True:
     if alpha > 0.9:
         break
 
-x_0 = np.random.rand(dim, n_agent)
 print('alpha = ' + str(alpha))
+
+x_0 = np.random.rand(dim, n_agent)
 
 
 eta_1 = 1 / p.L
@@ -36,8 +37,7 @@ eta_2 = 2 / (p.L + p.sigma)
 
 n_inner_iters = int(m * 0.05)
 
-n_mix = range(1, 20)
-
+n_mix = list(range(1, 20)) + [20, 25, 30, 35, 50]
 
 exps_dane = [
         NetworkDANE(p, n_iters=n_iters, n_mix=n, mu=mu, x_0=x_0, W=W)
