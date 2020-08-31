@@ -24,6 +24,17 @@ class LogisticRegression(Problem):
         self.L = 1
         self.sigma = self.LAMBDA
 
+        # self.L = np.linalg.eigvals(X_tmp.T.dot(X_tmp) / self.m / self.n).max()
+
+        self._generate_data()
+
+        self.f_min = self.f(self.w_min)
+        # print(w_0)
+        # print(self.w_min)
+        # print(np.linalg.norm(w_0 - self.w_min))
+
+
+    def _generate_data(self):
         # Generate data
         X = np.random.randn(self.m_total, self.dim)
         norm = np.sqrt(np.linalg.norm(X.T.dot(X), 2) / self.m_total)
@@ -31,7 +42,7 @@ class LogisticRegression(Problem):
         self.X_total = X
 
         # Generate labels
-        w_0 = np.random.rand(dim)
+        w_0 = np.random.rand(self.dim)
         Y_0_total = self._logit(self.X_total, w_0)
         Y_0_total[Y_0_total > 0.5] = 1
         Y_0_total[Y_0_total <= 0.5] = 0
@@ -41,30 +52,23 @@ class LogisticRegression(Problem):
         # self.Y = np.random.binomial(1, P)
         # self.X = X
         
-        noise = np.random.binomial(1, self.noise_ratio, self.m_total)
-        self.Y_total = np.multiply(noise - Y_0_total, noise) + np.multiply(Y_0_total, 1 - noise)
+        if self.noise_ratio is not None:
+            noise = np.random.binomial(1, self.noise_ratio, self.m_total)
+            self.Y_total = np.multiply(noise - Y_0_total, noise) + np.multiply(Y_0_total, 1 - noise)
+        else:
+            self.Y_total = self.Y_0_total
 
         self.X = self.split_data(self.m, self.X_total)
         self.Y = self.split_data(self.m, self.Y_total)
 
-        # X_tmp = self.X.reshape(-1, dim)
-        # Y_tmp = self.Y.reshape(-1)
-
-        # self.L = np.linalg.eigvals(X_tmp.T.dot(X_tmp) / self.m / self.n).max()
-
-        self.w_min = opt.minimize(
+        self.x_min = self.w_min = opt.minimize(
                 self.f,
-                np.random.rand(dim),
+                np.random.rand(self.dim),
                 jac=self.grad,
                 method='BFGS',
                 options={'gtol' :1e-8}
                 ).x
 
-        self.x_min = self.w_min
-        self.f_min = self.f(self.w_min)
-        # print(w_0)
-        # print(self.w_min)
-        # print(np.linalg.norm(w_0 - self.w_min))
 
     def grad(self, w, i=None, j=None):
         '''Gradient at w. If i is None, returns the full gradient; if i is not None but j is, returns the gradient in the i-th machine; otherwise,return the gradient of j-th sample in i-th machine. Note j can be a list.'''
