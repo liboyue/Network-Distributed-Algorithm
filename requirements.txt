@@ -1,4 +1,0 @@
-cvxpy
-seaborn
-scipy
-networkx
