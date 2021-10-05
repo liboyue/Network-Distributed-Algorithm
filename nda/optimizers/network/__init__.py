@@ -8,4 +8,4 @@ from .NetworkDANE_quadratic import NetworkDANE_quadratic
 
 from .NetworkSARAH import NetworkSARAH
 from .NetworkSVRG import NetworkSVRG
-from .Destress import Destress
+from .Destress import DESTRESS

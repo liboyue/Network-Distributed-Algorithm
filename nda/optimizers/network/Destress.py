@@ -20,7 +20,7 @@ def T(x, k):
     return current
 
 
-class Destress(Optimizer):
+class DESTRESS(Optimizer):
     def __init__(self, p, n_mix=1, n_inner_iters=100, eta=0.1, K_in=1, K_out=1, batch_size=1, opt=0, perturbation_threshould=None, perturbation_radius=None, perturbation_variance=None, **kwargs):
         super().__init__(p, **kwargs)
 
