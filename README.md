@@ -1,5 +1,4 @@
 # Network-Distributed Algorithm Experiments
---
 
 This repository contains a set of optimization algorithms and objective functions, and all code needed to reproduce experiments in:
 
@@ -38,13 +37,14 @@ The gradient implementations of all objective functions are checked numerically.
 
 ### Linear regression
 Linear regression with random generated data.
-The objective function is $f(w) = \frac{1}{N} \sum_i (y_i - x_i^\top w)^2$
+The objective function is
+<img src="https://render.githubusercontent.com/render/math?math=f(w) = \frac{1}{N} \sum_i (y_i - x_i^\top w)^2">
 
 ### Logistic regression
 Logistic regression with $l$-2 or nonconvex regularization with random generated data or the Gisette dataset or datasets from `libsvmtools`.
 The objective function is
-$$ f(w) =  - \frac{1}{N} * \Big(\sum_i y_i \log \frac{1}{1 + exp(w^T x_i)} + (1 - y_i) \log \frac{exp(w^T x_i)}{1 + exp(w^T x_i)} \Big) + \frac{\lambda}{2} \| w \|_2^2 + \alpha \sum_j \frac{w_j^2}{1 + w_j^2}
-$$
+<img src="https://render.githubusercontent.com/render/math?math=f(w) =  - \frac{1}{N} * \Big(\sum_i y_i \log \frac{1}{1 + exp(w^T x_i)} + (1 - y_i) \log \frac{exp(w^T x_i)}{1 + exp(w^T x_i)} \Big) + \frac{\lambda}{2} \| w \|_2^2 + \alpha \sum_j \frac{w_j^2}{1 + w_j^2}2">
+
 
 ### One-hidden-layer fully-connected neural netowrk
 One-hidden-layer fully-connected neural network with softmax loss on the MNIST dataset.
