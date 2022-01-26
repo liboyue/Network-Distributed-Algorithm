@@ -56,9 +56,9 @@ setup(
     author_email=EMAIL,
     # python_requires=REQUIRES_PYTHON,
     url=URL,
-    # packages=find_packages(exclude=["tests", "*.tests", "*.tests.*", "tests.*", "exps"]),
+    packages=find_packages(exclude=["tests", "*.tests", "*.tests.*", "tests.*", "exps"]),
     # If your package is a single module, use this instead of 'packages':
-    py_modules=['nda'],
+    # py_modules=['nda'],
 
     # entry_points={
     #     'console_scripts': ['mycli=mymodule:cli'],

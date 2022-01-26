@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding=utf-8
 import numpy as np
-from .network_optimizer import NetworkOptimizer
+from nda.optimizers.network import NetworkOptimizer
 
 
 class NetworkSVRG(NetworkOptimizer):
