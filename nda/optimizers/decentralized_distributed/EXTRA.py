@@ -1,6 +1,10 @@
 #!/usr/bin/env python
 # coding=utf-8
-import numpy as np
+try:
+    import cupy as xp
+except ModuleNotFoundError:
+    import numpy as xp
+
 from nda.optimizers import Optimizer
 
 
@@ -11,9 +15,12 @@ class EXTRA(Optimizer):
         super().__init__(p, **kwargs)
         self.eta = eta
         self.grad_last = None
-        W_min_diag = min(np.diag(self.W))
+
+    def init(self):
+        super().init()
+        W_min_diag = min(xp.diag(self.W))
         tmp = (1 - 1e-1) / (1 - W_min_diag)
-        self.W_s = self.W * tmp + np.eye(self.p.n_agent) * (1 - tmp)
+        self.W_s = self.W * tmp + xp.eye(self.p.n_agent) * (1 - tmp)
 
     def update(self):
         self.comm_rounds += 1

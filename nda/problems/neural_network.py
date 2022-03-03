@@ -1,7 +1,11 @@
 #!/usr/bin/env python
 # coding=utf-8
 import numpy as np
-import os
+
+try:
+    import cupy as xp
+except ModuleNotFoundError:
+    import numpy as xp
 
 from nda.problems import Problem
 from nda.datasets import MNIST
@@ -9,52 +13,39 @@ from nda import log
 
 
 def sigmoid(x):
-    return 1 / (1 + np.exp(-x))
+    return 1 / (1 + xp.exp(-x))
 
 
 def softmax(x):
-    tmp = np.exp(x)
+    tmp = xp.exp(x)
     return tmp / tmp.sum(axis=1, keepdims=True)
 
 
 def softmax_loss(Y, score):
-    return - np.sum(np.log(score[Y != 0])) / Y.shape[0]
-    # return - np.sum(Y * np.log(score)) / Y.shape[0]
+    return - xp.sum(xp.log(score[Y != 0])) / Y.shape[0]
+    # return - xp.sum(Y * xp.log(score)) / Y.shape[0]
 
 
 class NN(Problem):
     '''f(w) = 1/n \sum l_i(w), where l_i(w) is the logistic loss'''
 
-    def __init__(self, n_agent, n_hidden=64, shuffle=True, **kwargs):
+    def __init__(self, n_hidden=64, dataset='mnist', **kwargs):
 
-        # Load data
-        self.X_train, self.Y_train, self.X_test, self.Y_test = MNIST().load()
-
-        self.X_train = np.append(self.X_train, np.ones((self.X_train.shape[0], 1)), axis=1)
-        self.X_test = np.append(self.X_test, np.ones((self.X_test.shape[0], 1)), axis=1)
+        super().__init__(dataset=dataset, **kwargs)
 
         self.n_hidden = n_hidden  # Number of neurons in hidden layer
-        self.m = int(self.X_train.shape[0] / n_agent)
         self.n_class = self.Y_train.shape[1]
         self.img_dim = self.X_train.shape[1]
+        self.dim = (n_hidden + 1) * (self.img_dim + self.n_class)
 
-        log.info(self.img_dim)
-        log.info(self.n_class)
-        # Shuffle
-        if shuffle is True:
-            idx = np.random.permutation(len(self.X_train))
-            self.X_train, self.Y_train = self.X_train[idx], self.Y_train[idx]
+    def init(self):
+        super().init()
 
-        super().__init__(n_agent, self.m, (n_hidden + 1) * (self.img_dim + self.n_class), **kwargs)
-
-        # Split training data into n agents
-        self.X = self.split_data(self.X_train)
-        self.Y = self.split_data(self.Y_train)
         self.Y_train_labels = self.Y_train.argmax(axis=1)
         self.Y_test_labels = self.Y_test.argmax(axis=1)
 
         # Internal buffers
-        self._dw = np.zeros(self.dim)
+        self._dw = xp.zeros(self.dim)
         self._dw1, self._dw2 = self.unpack_w(self._dw)  # Reference to the internal buffer
 
     def unpack_w(self, W):
@@ -64,10 +55,13 @@ class NN(Problem):
 
     def pack_w(self, W_1, W_2):
         # This function returns a new array
-        return np.append(W_1.reshape(-1), W_2.reshape(-1))
+        return xp.append(W_1.reshape(-1), W_2.reshape(-1))
 
     def grad_h(self, w, i=None, j=None):
         '''Gradient at w. If i is None, returns the full gradient; if i is not None but j is, returns the gradient in the i-th machine; otherwise,return the gradient of j-th sample in i-th machine. '''
+
+        if not(self._dw1.base is self._dw and self._dw2.base is self._dw):
+            self._dw1, self._dw2 = self.unpack_w(self._dw)
 
         if w.ndim == 1:
             if type(j) is int:
@@ -84,20 +78,29 @@ class NN(Problem):
 
         elif w.ndim == 2:
             if i is None and j is None:  # Return the distributed gradient
-                return np.array([self.forward_backward(self.X[i], self.Y[i], w[:, i])[0].copy() for i in range(self.n_agent)]).T
+                return xp.array([self.forward_backward(self.X[i], self.Y[i], w[:, i])[0].copy() for i in range(self.n_agent)]).T
             elif i is None and j is not None:  # Return the stochastic gradient
-                return np.array([self.forward_backward(self.X[i][j[i]], self.Y[i][j[i]], w[:, i])[0].copy() for i in range(self.n_agent)]).T
+                return xp.array([self.forward_backward(self.X[i][j[i]], self.Y[i][j[i]], w[:, i])[0].copy() for i in range(self.n_agent)]).T
             else:
                 log.fatal('For distributed gradients j must be None')
 
         else:
             log.fatal('Parameter dimension should only be 1 or 2')
 
-    def h(self, w, i=None, j=None):
+    def h(self, w, i=None, j=None, split='train'):
         '''Function value at w. If i is None, returns f(x); if i is not None but j is, returns the function value in the i-th machine; otherwise,return the function value of j-th sample in i-th machine.'''
 
+        if split == 'train':
+            X = self.X_train
+            Y = self.Y_train
+        elif split == 'test':
+            if w.ndim > 1 or i is not None or j is not None:
+                log.fatal("Function value on test set only applies to one parameter vector")
+            X = self.X_test
+            Y = self.Y_test
+
         if i is None and j is None:  # Return the function value
-            return self.forward(self.X_train, self.Y_train, w)[0]
+            return self.forward(X, Y, w)[0]
         elif i is not None and j is None:  # Return the function value at machine i
             return self.forward(self.X[i], self.Y[i], w)[0]
         else:  # Return the function value at machine i
@@ -118,10 +121,10 @@ class NN(Problem):
         loss, A1, A2 = self.forward(X, Y, w)
 
         dZ2 = A2 - Y
-        np.dot(A1.T, dZ2, out=self._dw2)
+        xp.dot(A1.T, dZ2, out=self._dw2)
         dA1 = dZ2.dot(w2.T)
         dZ1 = dA1 * A1 * (1 - A1)
-        np.dot(X.T, dZ1, out=self._dw1)
+        xp.dot(X.T, dZ1, out=self._dw1)
         self._dw /= X.shape[0]
 
         return self._dw, loss
@@ -144,8 +147,3 @@ class NN(Problem):
         pred = A2.argmax(axis=1)
 
         return sum(pred == labels) / len(pred), loss
-
-
-if __name__ == '__main__':
-
-    p = NN()

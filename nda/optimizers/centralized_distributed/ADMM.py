@@ -1,6 +1,10 @@
 #!/usr/bin/env python
 # coding=utf-8
-import numpy as np
+try:
+    import cupy as xp
+except ModuleNotFoundError:
+    import numpy as xp
+
 
 from nda.optimizers.utils import NAG, GD, FISTA
 from nda.optimizers import Optimizer
@@ -14,13 +18,16 @@ class ADMM(Optimizer):
         self.rho = rho
         self.local_optimizer = local_optimizer
         self.local_n_iters = local_n_iters
-        self.Lambda = np.random.rand(self.p.dim, self.p.n_agent)
         self.delta = delta
+
+    def init(self):
+        super().init()
+        self.Lambda = xp.random.rand(self.p.dim, self.p.n_agent)
 
     def update(self):
         self.comm_rounds += 1
 
-        x = np.random.rand(self.p.dim, self.p.n_agent)
+        x = xp.random.rand(self.p.dim, self.p.n_agent)
         z = self.x.copy()  # Using notations from the tutorial
 
         for i in range(self.p.n_agent):

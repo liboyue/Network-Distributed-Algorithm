@@ -3,22 +3,19 @@
 
 # From https://github.com/navdeep-G/setup.py
 
-import io
-import os
-import sys
-from shutil import rmtree
-
-from setuptools import find_packages, setup, Command
+import io, os, sys
+from setuptools import find_packages, setup
 
 NAME = 'Network Distributed Algorithms'
 DESCRIPTION = 'Network distributed algorithms and experiments'
 URL = 'https://github.com/liboyue/Network-Distributed-Algorithm'
 EMAIL = 'boyuel@andrew.cmu.edu'
 AUTHOR = 'Boyue Li'
-VERSION = '0.1'
+VERSION = '0.2'
 
 # What packages are required for this module to be executed?
-REQUIRED = ['matplotlib', 'numpy', 'networkx', 'cvxpy', 'scipy', 'sklearn', 'colorlog']
+REQUIRED = ['matplotlib', 'numpy', 'networkx', 'cvxpy', 'pandas', 'scipy', 'sklearn', 'colorlog']
+EXTRAS = {'GPU': ['cupy']}
 
 # The rest you shouldn't have to touch too much :)
 # ------------------------------------------------
@@ -54,17 +51,11 @@ setup(
     long_description_content_type='text/markdown',
     author=AUTHOR,
     author_email=EMAIL,
-    # python_requires=REQUIRES_PYTHON,
     url=URL,
-    packages=find_packages(exclude=["tests", "*.tests", "*.tests.*", "tests.*", "exps"]),
-    # If your package is a single module, use this instead of 'packages':
-    # py_modules=['nda'],
+    packages=find_packages(exclude=["tests", "*.tests", "*.tests.*", "tests.*", "experiments"]),
 
-    # entry_points={
-    #     'console_scripts': ['mycli=mymodule:cli'],
-    # },
     install_requires=REQUIRED,
-    # extras_require=EXTRAS,
+    extras_require=EXTRAS,
     include_package_data=True,
     license='MIT',
     classifiers=[
@@ -73,8 +64,6 @@ setup(
         'License :: OSI Approved :: MIT License',
         'Programming Language :: Python',
         'Programming Language :: Python :: 3',
-        # 'Programming Language :: Python :: 3.8',
-        'Programming Language :: Python :: Implementation :: CPython',
-        'Programming Language :: Python :: Implementation :: PyPy'
+        'Programming Language :: Python :: 3.8',
     ],
 )

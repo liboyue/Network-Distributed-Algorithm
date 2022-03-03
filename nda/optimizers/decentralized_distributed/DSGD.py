@@ -1,6 +1,10 @@
 #!/usr/bin/env python
 # coding=utf-8
-import numpy as np
+try:
+    import cupy as xp
+except ModuleNotFoundError:
+    import numpy as xp
+
 from nda.optimizers import Optimizer
 
 
@@ -22,6 +26,8 @@ class DSGD(Optimizer):
         else:
             delta_t = self.eta
 
-        samples = np.random.randint(0, self.p.m, (self.p.n_agent, self.batch_size))
+        samples = xp.random.randint(0, self.p.m, (self.p.n_agent, self.batch_size))
         grad = self.grad(self.x, j=samples)
         self.x = self.x.dot(self.W) - delta_t * grad
+        # self.x -= delta_t * grad
+        # self.x = self.x.dot(self.W)

@@ -1,8 +1,15 @@
 #!/usr/bin/env python
 # coding=utf-8
 import numpy as np
+
+try:
+    import cupy as xp
+except ModuleNotFoundError:
+    import numpy as xp
+
 import networkx as nx
 import cvxpy as cvx
+import os
 
 eps = 1e-6
 
@@ -10,7 +17,7 @@ def NAG(grad, x_0, L, sigma, n_iters=100, eps=eps):
     '''Nesterov's Accelerated Gradient Descent for strongly convex functions'''
 
     x = y = x_0
-    root_kappa = np.sqrt(L / sigma)
+    root_kappa = xp.sqrt(L / sigma)
     r = (root_kappa - 1) / (root_kappa + 1)
     r_1 = 1 + r
     r_2 = r
@@ -20,7 +27,7 @@ def NAG(grad, x_0, L, sigma, n_iters=100, eps=eps):
         y = x - grad(x) / L
         x = r_1*y - r_2*y_last
 
-        if np.linalg.norm(y) < eps:
+        if xp.linalg.norm(y) < eps:
             break
 
     return y, t
@@ -33,7 +40,7 @@ def GD(grad, x_0, eta, n_iters=100, eps=eps):
     for t in range(n_iters):
         x -= eta * grad(x)
 
-        if np.linalg.norm(x) < eps:
+        if xp.linalg.norm(x) < eps:
             break
 
     return x, t + 1
@@ -42,15 +49,15 @@ def GD(grad, x_0, eta, n_iters=100, eps=eps):
 def Sub_GD(grad, x_0, n_iters=100, eps=eps):
     '''Sub-gradient Descent'''
 
-    R = np.linalg.norm(x_0)
+    R = xp.linalg.norm(x_0)
     x = x_0
     for t in range(n_iters):
-        eta_t = R / np.sqrt(t)
+        eta_t = R / xp.sqrt(t)
         g_t = grad(x)
-        g_t /= np.linalg.norm(g_t)
+        g_t /= xp.linalg.norm(g_t)
         x -= eta_t * g_t
 
-        if np.linalg.norm(grad(x)) < eps:
+        if xp.linalg.norm(grad(x)) < eps:
             break
 
     return x, t + 1
@@ -58,10 +65,10 @@ def Sub_GD(grad, x_0, n_iters=100, eps=eps):
 
 def FISTA(grad_f, x_0, L, LAMBDA, n_iters=100, eps=1e-10):
     '''FISTA'''
-    r = np.zeros(n_iters+1)
+    r = xp.zeros(n_iters+1)
 
     for t in range(1, n_iters + 1):
-        r[t] = 0.5 + np.sqrt(1 + 4 * r[t - 1] ** 2) / 2
+        r[t] = 0.5 + xp.sqrt(1 + 4 * r[t - 1] ** 2) / 2
 
     gamma = (1 - r[:n_iters]) / r[1:]
 
@@ -70,11 +77,11 @@ def FISTA(grad_f, x_0, L, LAMBDA, n_iters=100, eps=1e-10):
 
     for t in range(1, n_iters):
         x -= grad_f(x) / L
-        y_new = np.sign(x) * np.maximum(np.abs(x) - LAMBDA/L, 0)
+        y_new = xp.sign(x) * xp.maximum(xp.abs(x) - LAMBDA/L, 0)
         x = (1 - gamma[t]) * y_new + gamma[t] * y
         y = y_new
 
-        if np.linalg.norm(grad_f(y)) < eps:
+        if xp.linalg.norm(grad_f(y)) < eps:
             break
 
     return y, t + 1
@@ -120,6 +127,7 @@ def asymmetric_fdla_matrix(G, m):
 
 
 def symmetric_fdla_matrix(G):
+
     n = G.number_of_nodes()
 
     ind = nx.adjacency_matrix(G).toarray() + np.eye(n)
@@ -151,7 +159,7 @@ def symmetric_fdla_matrix(G):
     W -= np.diag(W.sum(axis=1) - 1)
     alpha = np.linalg.norm(W - average_matrix, 2)
 
-    return W, alpha
+    return np.array(W), alpha
 
 def relative_error(x, y):
-    return np.linalg.norm(x - y) / np.linalg.norm(y)
+    return xp.linalg.norm(x - y) / xp.linalg.norm(y)

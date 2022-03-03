@@ -17,7 +17,7 @@ class DGD_tracking(Optimizer):
         self.grad_last = self.s.copy()
 
     def update(self):
-        self.comm_rounds += 1
+        self.comm_rounds += 2
 
         self.x = self.x.dot(self.W) - self.eta * self.s
         grad_current = self.grad(self.x)

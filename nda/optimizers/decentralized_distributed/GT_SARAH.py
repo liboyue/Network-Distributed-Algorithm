@@ -1,6 +1,10 @@
 #!/usr/bin/env python
 # coding=utf-8
-import numpy as np
+try:
+    import cupy as xp
+except ModuleNotFoundError:
+    import numpy as xp
+
 from nda.optimizers import Optimizer
 
 
@@ -11,32 +15,35 @@ class GT_SARAH(Optimizer):
         super().__init__(p, **kwargs)
         self.eta = eta
         self.n_inner_iters = n_inner_iters
-        self.v = np.zeros((self.p.dim, self.p.n_agent))
-        self.y = np.zeros((self.p.dim, self.p.n_agent))
         self.batch_size = batch_size
+
+    def init(self):
+        super().init()
+        self.v = xp.zeros((self.p.dim, self.p.n_agent))
+        self.y = xp.zeros((self.p.dim, self.p.n_agent))
+
 
     def update(self):
 
-        self.v_last = self.v.copy()
-        self.x_last = self.x.copy()
+        self.v_last = self.v
+        self.x_last = self.x
 
         self.v = self.grad(self.x)
         self.y = self.y.dot(self.W) + self.v - self.v_last
         self.x = self.x.dot(self.W) - self.eta * self.y
-        self.comm_rounds += 2
+        self.comm_rounds += 1
 
+        samples = xp.random.randint(0, self.p.m, (self.n_inner_iters, self.p.n_agent, self.batch_size))
         for inner_iter in range(self.n_inner_iters):
 
-            self.v_last = self.v.copy()
+            self.v_last = self.v
+            self.x_last = self.x
 
-            samples = np.random.randint(0, self.p.m, (self.p.n_agent, self.batch_size))
-            self.v += self.grad(self.x, j=samples) - self.grad(self.x_last, j=samples)
-            self.x_last = self.x.copy()
+            self.v = self.v + self.grad(self.x, j=samples[inner_iter]) - self.grad(self.x_last, j=samples[inner_iter])
 
             self.y = self.y.dot(self.W) + self.v - self.v_last
             self.x = self.x.dot(self.W) - self.eta * self.y
-            self.comm_rounds += 2
+            self.comm_rounds += 1
 
             if inner_iter < self.n_inner_iters - 1:
                 self.save_metrics()
-                self.save_history()

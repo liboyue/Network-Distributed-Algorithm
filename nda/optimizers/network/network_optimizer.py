@@ -1,9 +1,16 @@
 #!/usr/bin/env python
 # coding=utf-8
 import numpy as np
+
+try:
+    import cupy as xp
+except ModuleNotFoundError:
+    import numpy as xp
+
+norm = xp.linalg.norm
+
 import matplotlib.pyplot as plt
 from nda.optimizers import Optimizer
-norm = np.linalg.norm
 
 
 class NetworkOptimizer(Optimizer):
@@ -14,20 +21,23 @@ class NetworkOptimizer(Optimizer):
         self.n_mix = n_mix
         self.grad_tracking_batch_size = grad_tracking_batch_size
 
-        W_min_diag = min(np.diag(self.W))
+    def init(self):
+        super().init()
+        W_min_diag = min(xp.diag(self.W))
         tmp = (1 - 1e-1) / (1 - W_min_diag)
-        self.W_s = self.W * tmp + np.eye(self.p.n_agent) * (1 - tmp)
+        self.W_s = self.W * tmp + xp.eye(self.p.n_agent) * (1 - tmp)
 
         # Equivalent mixing matrices after n_mix rounds of mixng
-        self.W = np.linalg.matrix_power(self.W, self.n_mix)
-        self.W_s = np.linalg.matrix_power(self.W_s, self.n_mix)
+        self.W = xp.linalg.matrix_power(self.W, self.n_mix)
+        self.W_s = xp.linalg.matrix_power(self.W_s, self.n_mix)
 
         self.y = self.x_0.copy()
-        self.s = np.zeros((self.p.dim, self.p.n_agent))
+        self.s = xp.zeros((self.p.dim, self.p.n_agent))
         for i in range(self.p.n_agent):
             self.s[:, i] = self.grad_h(self.y[:, i], i)
 
         self.grad_last = self.s.copy()
+
 
     def update(self):
         self.comm_rounds += self.n_mix
@@ -48,12 +58,12 @@ class NetworkOptimizer(Optimizer):
             if self.p.is_smooth is True:
                 for i in range(self.p.n_agent):
                     # We need to compute the stochastic gradient everytime
-                    j_list = np.random.randint(0, self.p.m, self.grad_tracking_batch_size)
+                    j_list = xp.random.randint(0, self.p.m, self.grad_tracking_batch_size)
                     self.s[:, i] += self.grad_h(self.y[:, i], i, j_list) - self.grad(y_last[:, i], i, j_list)
             else:
                 for i in range(self.p.n_agent):
                     # We need to compute the stochastic gradient everytime
-                    j_list = np.random.randint(0, self.p.m, self.grad_tracking_batch_size)
+                    j_list = xp.random.randint(0, self.p.m, self.grad_tracking_batch_size)
                     self.s[:, i] += self.grad_h(self.y[:, i], i, j_list) - self.grad_h(y_last[:, i], i, j_list)
 
         self.local_update()

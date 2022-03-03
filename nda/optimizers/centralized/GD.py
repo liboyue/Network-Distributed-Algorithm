@@ -1,6 +1,10 @@
 #!/usr/bin/env python
 # coding=utf-8
-import numpy as np
+try:
+    import cupy as xp
+except ModuleNotFoundError:
+    import numpy as xp
+
 from nda import log
 from nda.optimizers import Optimizer
 
@@ -20,4 +24,4 @@ class GD(Optimizer):
         self.x -= self.eta * self.grad(self.x)
 
     def subgd_update(self):
-        self.x -= self.eta / np.sqrt(self.t) * self.grad(self.x)
+        self.x -= self.eta / xp.sqrt(self.t) * self.grad(self.x)

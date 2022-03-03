@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding=utf-8
-import numpy as np
 import os
+import numpy as np
 
 from nda import log
 
@@ -11,10 +11,7 @@ class Dataset:
         self.name = self.__class__.__name__ if name is None else name
         self.data_root = os.path.expanduser(root)
         self.data_dir = os.path.join(self.data_root, self.name)
-        if normalize:
-            self.cache_path = os.path.join(self.data_dir, '%s_normalized.npz' % self.name)
-        else:
-            self.cache_path = os.path.join(self.data_dir, '%s.npz' % self.name)
+        self.cache_path = os.path.join(self.data_dir, '%s.npz' % self.name)
         self.data_urls = data_urls
         self.normalize = normalize
 
@@ -23,21 +20,34 @@ class Dataset:
             log.info('Downloading %s dataset' % self.name)
             os.system('mkdir -p %s' % self.data_dir)
             self.download()
-            data = self.load_raw()
+            self.load_raw()
             np.savez_compressed(
                 self.cache_path,
-                X_train=data[0], Y_train=data[1],
-                X_test=data[2], Y_test=data[3]
+                X_train=self.X_train, Y_train=self.Y_train,
+                X_test=self.X_test, Y_test=self.Y_test
             )
-            return data
 
         else:
             log.info('Loading %s dataset from cached file' % self.name)
             data = np.load(self.cache_path, allow_pickle=True)
-            return [data[key] for key in ['X_train', 'Y_train', 'X_test', 'Y_test']]
+            self.X_train = data['X_train']
+            self.Y_train = data['Y_train']
+            self.X_test = data['X_test']
+            self.Y_test = data['Y_test']
+
+        if self.normalize:
+            self.normalize_data()
+        
+        return self.X_train, self.Y_train, self.X_test, self.Y_test
 
     def load_raw(self):
         raise NotImplementedError
+
+    def normalize_data(self):
+        mean = self.X_train.mean()
+        std = self.X_train.std()
+        self.X_train = (self.X_train - mean) / std
+        self.X_test = (self.X_test - mean) / std
 
     def download(self):
         os.system("mkdir -p %s" % self.data_dir)

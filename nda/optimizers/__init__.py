@@ -7,3 +7,5 @@ from nda.optimizers.centralized_distributed import ADMM, DANE
 
 from nda.optimizers.decentralized_distributed import *
 from nda.optimizers.network import *
+
+from nda.optimizers import compressor

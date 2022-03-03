@@ -1,6 +1,12 @@
 #!/usr/bin/env python
 # coding=utf-8
 import numpy as np
+
+try:
+    import cupy as xp
+except ImportError:
+    xp = np
+
 import networkx as nx
 import matplotlib.pyplot as plt
 from nda import log
@@ -9,7 +15,8 @@ from nda import log
 class Problem(object):
     '''The base problem class, which generates the random problem and supports function value and gradient evaluation'''
 
-    def __init__(self, n_agent, m, dim, graph_type='expander', graph_params=None, regularization=None, r=0):
+    def __init__(self, n_agent=20, m=1000, dim=40, graph_type='er', graph_params=None, regularization=None, r=0, dataset='random', sort=False, shuffle=False, normalize_data=False, gpu=False):
+
         self.n_agent = n_agent          # Number of agents
         self.m = m                      # Number of samples per agent
         self.dim = dim                  # Dimension of the variable
@@ -22,11 +29,53 @@ class Problem(object):
         self.f_min = None               # The optimal function value
         self.L = None                   # The smoothness constant
         self.sigma = 0                  # The strong convexity constant
-        self.m_total = m * n_agent      # Total number of data samples of all agents
         self.is_smooth = True           # If the problem is smooth or not
         self.r = r
         self.graph_params = graph_params
         self.graph_type = graph_type
+        self.is_initialized = False
+
+        if dataset == 'random':
+            self.m_total = m * n_agent      # Total number of data samples of all agents
+            self.generate_data()
+        else:
+            from nda import datasets
+            
+            if dataset == 'gisette':
+                self.X_train, self.Y_train, self.X_test, self.Y_test = datasets.Gisette(normalize=normalize_data).load()
+            elif dataset == 'mnist':
+                self.X_train, self.Y_train, self.X_test, self.Y_test = datasets.MNIST(normalize=normalize_data).load()
+
+            else:
+                self.X_train, self.Y_train, self.X_test, self.Y_test = datasets.LibSVM(name=dataset, normalize=normalize_data).load()
+
+            self.X_train = np.append(self.X_train, np.ones((self.X_train.shape[0], 1)), axis=1)
+            self.X_test = np.append(self.X_test, np.ones((self.X_test.shape[0], 1)), axis=1)
+            self.m = self.X_train.shape[0] // n_agent
+            self.m_total = self.m * n_agent
+
+            self.X_train = self.X_train[:self.m_total]
+            self.Y_train = self.Y_train[:self.m_total]
+            self.dim = self.X_train.shape[1]
+
+            self.dataset = dataset
+
+        if sort or shuffle:
+            if sort:
+                if self.Y_train.ndim > 1:
+                    order = self.Y_train.argmax(axis=1).argsort()
+                else:
+                    order = self.Y_train.argsort()
+            elif shuffle:
+                order = np.random.permutation(len(self.X_train))
+
+            self.X_train = self.X_train[order].copy()
+            self.Y_train = self.Y_train[order].copy()
+
+        # Split data
+        self.X = self.split_data(self.X_train)
+        self.Y = self.split_data(self.Y_train)
+
 
         self.generate_graph(graph_type=graph_type, params=graph_params)
 
@@ -36,6 +85,15 @@ class Problem(object):
 
         elif regularization == 'l2':
             self.grad_g = self._grad_regularization_l2
+
+    def init(self):
+        log.debug("Initializing problem")
+
+        if xp.__name__ == 'cupy':
+            for var in ['X', 'Y', 'X_train', 'Y_train', 'X_test', 'Y_test']:
+                if hasattr(self, var):
+                    setattr(self, var, xp.array(getattr(self, var)))
+        self.is_initialized = True
 
     def split_data(self, X):
         '''Helper function to split data according to the number of training samples per agent.'''
@@ -93,29 +151,29 @@ class Problem(object):
         '''
         return 0
 
-    def f(self, w, i=None, j=None):
+    def f(self, w, i=None, j=None, split='train'):
         '''Function value of f(x) = h(x) + g(x) at w. If i is None, returns the global function value; if i is not None but j is, returns the function value in the i-th machine; otherwise,return the function value of j-th sample in i-th machine.'''
-        return self.h(w, i=i, j=j) + self.g(w)
+        return self.h(w, i=i, j=j, split=split) + self.g(w)
 
     def hessian(self, *args, **kwargs):
         raise NotImplementedError
 
-    def h(self, w, i=None, j=None):
+    def h(self, w, i=None, j=None, split='train'):
         '''Function value at w. If i is None, returns h(x); if i is not None but j is, returns the function value in the i-th machine; otherwise,return the function value of j-th sample in i-th machine.'''
-        pass
+        raise NotImplementedError
 
     def g(self, w):
         '''Function value of g(x) at w. Returns 0 if no regularization.'''
         return 0
 
     def _regularization_l1(self, w):
-        return self.r * np.abs(w).sum(axis=0)
+        return self.r * xp.abs(w).sum(axis=0)
 
     def _regularization_l2(self, w):
         return self.r * (w * w).sum(axis=0)
 
     def _grad_regularization_l1(self, w):
-        g = np.zeros(w.shape)
+        g = xp.zeros(w.shape)
         g[w > 1e-5] = 1
         g[w < -1e-5] = -1
         return self.r * g
@@ -125,9 +183,9 @@ class Problem(object):
 
     def grad_check(self):
         '''Check whether the full gradient equals to the gradient computed by finite difference at a random point.'''
-        w = np.random.randn(self.dim)
-        delta = np.zeros(self.dim)
-        grad = np.zeros(self.dim)
+        w = xp.random.randn(self.dim)
+        delta = xp.zeros(self.dim)
+        grad = xp.zeros(self.dim)
         eps = 1e-4
 
         for i in range(self.dim):
@@ -135,8 +193,9 @@ class Problem(object):
             grad[i] = (self.f(w + delta) - self.f(w - delta)) / 2 / eps
             delta[i] = 0
 
-        if np.linalg.norm(grad - self.grad(w)) > eps:
-            log.warn('Gradient implementation check failed!')
+        error = xp.linalg.norm(grad - self.grad(w))
+        if error > eps:
+            log.warn('Gradient implementation check failed with difference %.4f!' % error)
             return False
         else:
             log.info('Gradient implementation check succeeded!')
@@ -147,7 +206,7 @@ class Problem(object):
 
         def _check_1d_gradient():
 
-            w = np.random.randn(self.dim)
+            w = xp.random.randn(self.dim)
             g = self.grad(w)
             g_i = g_ij = 0
             res = True
@@ -158,8 +217,8 @@ class Problem(object):
                 for j in range(self.m):
                     _tmp_g_ij += self.grad(w, i, j)
 
-                if np.linalg.norm(_tmp_g_i - _tmp_g_ij / self.m) > 1e-5:
-                    log.warn('Distributed graident check failed! Difference between local graident at agent %d and average of all local sample gradients is %.4f' % (i, np.linalg.norm(_tmp_g_i - _tmp_g_ij / self.m)))
+                if xp.linalg.norm(_tmp_g_i - _tmp_g_ij / self.m) > 1e-5:
+                    log.warn('Distributed graident check failed! Difference between local graident at agent %d and average of all local sample gradients is %.4f' % (i, xp.linalg.norm(_tmp_g_i - _tmp_g_ij / self.m)))
                     res = False
 
                 g_i += _tmp_g_i
@@ -168,12 +227,12 @@ class Problem(object):
             g_i /= self.n_agent
             g_ij /= self.m_total
 
-            if np.linalg.norm(g - g_i) > 1e-5:
-                log.warn('Distributed gradient check failed! Difference between global graident and average of local gradients is %.4f', np.linalg.norm(g - g_i))
+            if xp.linalg.norm(g - g_i) > 1e-5:
+                log.warn('Distributed gradient check failed! Difference between global graident and average of local gradients is %.4f', xp.linalg.norm(g - g_i))
                 res = False
 
-            if np.linalg.norm(g - g_ij) > 1e-5:
-                log.warn('Distributed graident check failed! Difference between global graident and average of all sample gradients is %.4f' % np.linalg.norm(g - g_ij))
+            if xp.linalg.norm(g - g_ij) > 1e-5:
+                log.warn('Distributed graident check failed! Difference between global graident and average of all sample gradients is %.4f' % xp.linalg.norm(g - g_ij))
                 res = False
 
             return res
@@ -181,7 +240,7 @@ class Problem(object):
         def _check_2d_gradient():
 
             res = True
-            w_2d = np.random.randn(self.dim, self.n_agent)
+            w_2d = xp.random.randn(self.dim, self.n_agent)
 
             g_1d = 0
             for i in range(self.n_agent):
@@ -190,28 +249,28 @@ class Problem(object):
             g_1d /= self.n_agent
             g_2d = self.grad(w_2d).mean(axis=1)
 
-            if np.linalg.norm(g_1d - g_2d) > 1e-5:
-                log.warn('Distributed graident check failed! Difference between global gradient and average of distributed graidents is %.4f' % np.linalg.norm(g_1d - g_2d))
+            if xp.linalg.norm(g_1d - g_2d) > 1e-5:
+                log.warn('Distributed graident check failed! Difference between global gradient and average of distributed graidents is %.4f' % xp.linalg.norm(g_1d - g_2d))
                 res = False
 
-            g_2d_sample = self.grad(w_2d, j=np.arange(self.m).reshape(-1, 1).repeat(self.n_agent, axis=1).T).mean(axis=1)
+            g_2d_sample = self.grad(w_2d, j=xp.arange(self.m).reshape(-1, 1).repeat(self.n_agent, axis=1).T).mean(axis=1)
 
-            if np.linalg.norm(g_1d - g_2d_sample) > 1e-5:
-                log.warn('Distributed graident check failed! Difference between global graident and average of all sample gradients is %.4f' % np.linalg.norm(g_1d - g_2d_sample))
+            if xp.linalg.norm(g_1d - g_2d_sample) > 1e-5:
+                log.warn('Distributed graident check failed! Difference between global graident and average of all sample gradients is %.4f' % xp.linalg.norm(g_1d - g_2d_sample))
                 res = False
 
-            samples = np.random.randint(0, self.m, (self.n_agent, 10))
+            samples = xp.random.randint(0, self.m, (self.n_agent, 10))
             g_2d_stochastic = self.grad(w_2d, j=samples)
             for i in range(self.n_agent):
                 g_1d_stochastic = self.grad(w_2d[:, i], i=i, j=samples[i])
-                if np.linalg.norm(g_1d_stochastic - g_2d_stochastic[:, i]) > 1e-5:
-                    log.warn('Distributed graident check failed! Difference between distributed stoachastic gradient at agent %d and average of sample gradients is %.4f' % (i, np.linalg.norm(g_1d_stochastic - g_2d_stochastic[:, i])))
+                if xp.linalg.norm(g_1d_stochastic - g_2d_stochastic[:, i]) > 1e-5:
+                    log.warn('Distributed graident check failed! Difference between distributed stoachastic gradient at agent %d and average of sample gradients is %.4f' % (i, xp.linalg.norm(g_1d_stochastic - g_2d_stochastic[:, i])))
                     res = False
 
             return res
 
         def _check_function_value():
-            w = np.random.randn(self.dim)
+            w = xp.random.randn(self.dim)
             f = self.f(w)
             f_i = f_ij = 0
             res = True
@@ -222,8 +281,8 @@ class Problem(object):
                 for j in range(self.m):
                     _tmp_f_ij += self.f(w, i, j)
 
-                if np.abs(_tmp_f_i - _tmp_f_ij / self.m) > 1e-10:
-                    log.warn('Distributed function value check failed! Difference between local function value at agent %d and average of all local sample function values %d is %.4f' % (i, i, np.abs(_tmp_f_i - _tmp_f_ij / self.m)))
+                if xp.abs(_tmp_f_i - _tmp_f_ij / self.m) > 1e-10:
+                    log.warn('Distributed function value check failed! Difference between local function value at agent %d and average of all local sample function values %d is %.4f' % (i, i, xp.abs(_tmp_f_i - _tmp_f_ij / self.m)))
                     res = False
 
                 f_i += _tmp_f_i
@@ -232,12 +291,12 @@ class Problem(object):
             f_i /= self.n_agent
             f_ij /= self.m_total
 
-            if np.abs(f - f_i) > 1e-10:
-                log.warn('Distributed function value check failed! Difference between the global function value and average of local function values is %.4f' % np.abs(f - f_i))
+            if xp.abs(f - f_i) > 1e-10:
+                log.warn('Distributed function value check failed! Difference between the global function value and average of local function values is %.4f' % xp.abs(f - f_i))
                 res = False
 
-            if np.abs(f - f_ij) > 1e-10:
-                log.warn('Distributed function value check failed! Difference between the global function value and average of all sample function values is %.4f' % np.abs(f - f_ij))
+            if xp.abs(f - f_ij) > 1e-10:
+                log.warn('Distributed function value check failed! Difference between the global function value and average of all sample function values is %.4f' % xp.abs(f - f_ij))
                 res = False
 
             return res
@@ -256,6 +315,8 @@ class Problem(object):
             G = nx.paley_graph(self.n_agent).to_undirected()
         elif graph_type == 'grid':
             G = nx.grid_2d_graph(*params)
+        elif graph_type == 'cycle':
+            G = nx.cycle_graph(self.n_agent)
         elif graph_type == 'path':
             G = nx.path_graph(self.n_agent)
         elif graph_type == 'star':

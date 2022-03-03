@@ -1,6 +1,10 @@
 #!/usr/bin/env python
 # coding=utf-8
-import numpy as np
+try:
+    import cupy as xp
+except ModuleNotFoundError:
+    import numpy as xp
+
 from nda.optimizers import Optimizer
 
 
@@ -12,11 +16,10 @@ class SGD(Optimizer):
         self.eta = eta
         self.batch_size = batch_size
         self.diminishing_step_size = diminishing_step_size
-        self.agents = np.array(range(self.p.n_agent))
 
     def update(self):
 
-        sample_list = np.random.randint(0, self.p.m_total, self.batch_size)
+        sample_list = xp.random.randint(0, self.p.m_total, self.batch_size)
         grad = self.grad(self.x, j=sample_list)
 
         if self.diminishing_step_size is True:

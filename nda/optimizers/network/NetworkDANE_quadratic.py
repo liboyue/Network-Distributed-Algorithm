@@ -1,7 +1,11 @@
 #!/usr/bin/env python
 # coding=utf-8
-import numpy as np
-from nda.optimizers.network import NetworkOptimizer
+try:
+    import cupy as np
+except ModuleNotFoundError:
+    import numpy as np
+
+from .network_optimizer import NetworkOptimizer
 
 
 class NetworkDANE_quadratic(NetworkOptimizer):

@@ -1,7 +1,11 @@
 #!/usr/bin/env python
 # coding=utf-8
-import numpy as np
-from nda.optimizers.network import NetworkOptimizer
+try:
+    import cupy as np
+except ModuleNotFoundError:
+    import numpy as np
+
+from .network_optimizer import NetworkOptimizer
 
 
 class NetworkSVRG(NetworkOptimizer):
@@ -18,12 +22,14 @@ class NetworkSVRG(NetworkOptimizer):
         v = self.s
 
         if self.opt == 1:
-            inner_iters = self.n_inner_iters
+            n_inner_iters = self.n_inner_iters
         else:
             # Choose random x^{(t)} from n_inner_iters
-            inner_iters = np.random.randint(1, self.n_inner_iters + 1)
+            n_inner_iters = np.random.randint(1, self.n_inner_iters + 1)
+            if type(n_inner_iters) is np.ndarray:
+                n_inner_iters = n_inner_iters.item()
 
-        for _ in range(inner_iters):
+        for _ in range(n_inner_iters):
             u -= self.eta * v
             sample_list = np.random.randint(0, self.p.m, (self.p.n_agent, self.batch_size))
             v = self.grad(u, j=sample_list) - self.grad(self.y, j=sample_list) \

@@ -1,7 +1,11 @@
 __pycache__
 figs
 data
-*.data
-*.npz
+build
+problems/MNIST
+*npz
+*pt
+*egg-info
+*data
 .DS_Store
 *egg-info

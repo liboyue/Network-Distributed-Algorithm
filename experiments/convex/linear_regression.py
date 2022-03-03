@@ -18,9 +18,9 @@ if __name__ == '__main__':
 
     kappa = 10
     mu = 5e-10
-    n_iters = 30
+    n_iters = 10
 
-    p = LinearRegression(n_agent, m, dim, noise_variance=1, kappa=kappa, graph_type='er', graph_params=0.3)
+    p = LinearRegression(n_agent=n_agent, m=m, dim=dim, noise_variance=1, kappa=kappa, graph_type='er', graph_params=0.3)
     W, alpha = generate_mixing_matrix(p)
 
     log.info('m = %d, n = %d, alpha = %.4f' % (m, n_agent, alpha))
@@ -52,6 +52,6 @@ if __name__ == '__main__':
 
     exps = centralized + distributed
 
-    res = run_exp(exps, kappa=kappa, max_iter=n_iters, name='linear_regression', n_process=5, save=True)
+    res = run_exp(exps, kappa=kappa, max_iter=n_iters, name='linear_regression', n_cpu_processes=4, save=True)
 
     plt.show()

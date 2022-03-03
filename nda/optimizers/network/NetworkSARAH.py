@@ -1,7 +1,11 @@
 #!/usr/bin/env python
 # coding=utf-8
-import numpy as np
-from nda.optimizers.network import NetworkOptimizer
+try:
+    import cupy as np
+except ModuleNotFoundError:
+    import numpy as np
+
+from .network_optimizer import NetworkOptimizer
 
 
 class NetworkSARAH(NetworkOptimizer):
@@ -18,12 +22,14 @@ class NetworkSARAH(NetworkOptimizer):
         v = self.s.copy()
 
         if self.opt == 1:
-            inner_iters = self.n_inner_iters
+            n_inner_iters = self.n_inner_iters
         else:
             # Choose random x^{(t)} from n_inner_iters
-            inner_iters = np.random.randint(1, self.n_inner_iters + 1)
+            n_inner_iters = np.random.randint(1, self.n_inner_iters + 1)
+            if type(n_inner_iters) is np.ndarray:
+                n_inner_iters = n_inner_iters.item()
 
-        for _ in range(inner_iters):
+        for _ in range(n_inner_iters):
             u_last = u.copy()
             u -= self.eta * v
 

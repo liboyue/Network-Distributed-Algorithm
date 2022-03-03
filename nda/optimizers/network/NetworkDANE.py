@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding=utf-8
 from nda.optimizers.utils import NAG, GD, FISTA
-from nda.optimizers.network import NetworkOptimizer
+from .network_optimizer import NetworkOptimizer
 
 
 class NetworkDANE(NetworkOptimizer):

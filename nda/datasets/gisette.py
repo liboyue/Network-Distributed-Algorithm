@@ -30,12 +30,10 @@ class Gisette(Dataset):
             labels[labels < 0] = 0
             return data, labels
 
-        X_train, Y_train = _load_raw('train')
-        X_test, Y_test = _load_raw('valid')
-        if self.normalize:
-            # norm = np.linalg.norm(X_train, 2) / np.sqrt(X_train.shape[0]) / 2
-            norm = 5862.929955361674
-            X_train /= norm
-            X_test /= norm
-            
-        return X_train, Y_train, X_test, Y_test
+        self.X_train, self.Y_train = _load_raw('train')
+        self.X_test, self.Y_test = _load_raw('valid')
+
+    def normalize_data(self):
+        self.X_train /= 999
+        self.X_test /= 999
+        super().normalize_data()

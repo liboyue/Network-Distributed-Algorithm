@@ -1,42 +1,26 @@
 #!/usr/bin/env python
 # coding=utf-8
 import numpy as np
+
+try:
+    import cupy as xp
+except ModuleNotFoundError:
+    import numpy as xp
+
 from scipy import optimize as opt
 from nda import log, datasets
 from nda.problems import Problem
 
 
 def logit_1d(X, w):
+    return 1 / (1 + xp.exp(-X.dot(w)))
+
+def logit_1d_np(X, w):
     return 1 / (1 + np.exp(-X.dot(w)))
 
-
 def logit_2d(X, w):
-    tmp = np.einsum('ijk,ki->ij', X, w)
-    return 1 / (1 + np.exp(-tmp))
-
-
-def generate_data(m_total, dim, noise_ratio, m_test=None):
-    if m_test is None:
-        m_test = int(m_total / 10)
-
-    # Generate data
-    X = np.random.randn(m_total + m_test, dim)
-    norm = np.sqrt(2 * np.linalg.norm(X.T.dot(X), 2) / (m_total + m_test))
-    X /= 2 * norm
-
-    # Generate labels
-    w_0 = np.random.rand(dim)
-    Y = logit_1d(X, w_0)
-    Y[Y > 0.5] = 1
-    Y[Y <= 0.5] = 0
-
-    X_train, X_test = X[:m_total], X[:m_total]
-    Y_train, Y_test = Y[:m_total], Y[:m_total]
-
-    noise = np.random.binomial(1, noise_ratio, m_total)
-    Y_train = (noise - Y_train) * noise + Y_train * (1 - noise)
-
-    return X_train, Y_train, X_test, Y_test, w_0
+    tmp = xp.einsum('ijk,ki->ij', X, w)
+    return 1 / (1 + xp.exp(-tmp))
 
 
 class LogisticRegression(Problem):
@@ -51,30 +35,14 @@ class LogisticRegression(Problem):
             return 0
         return (1 - 1 / (1 + w ** 2)).sum() * self.alpha
 
-    def __init__(self, n_agent, m=None, dim=None, dataset='random', kappa=None, noise_ratio=None, LAMBDA=0, alpha=0, **kwargs):
-
-        if dataset == 'random':
-            self.X_train, self.Y_train, self.X_test, self.Y_test, self.w_0 = generate_data(n_agent * m, dim, noise_ratio)
-        else:
-            if dataset == 'gisette':
-                self.X_train, self.Y_train, self.X_test, self.Y_test = datasets.Gisette(normalize=True).load()
-            elif dataset == 'a9a':
-                self.X_train, self.Y_train, self.X_test, self.Y_test = datasets.LibSVM(name='a9a', normalize=True).load()
-
-            m = int(self.X_train.shape[0] / n_agent)
-            self.X_train = self.X_train[:m * n_agent]
-            self.Y_train = self.Y_train[:m * n_agent]
-            dim = self.X_train.shape[1]
-
-        super().__init__(n_agent, m, dim, **kwargs)
+    def __init__(self, kappa=None, noise_ratio=None, LAMBDA=0, alpha=0, **kwargs):
 
         self.noise_ratio = noise_ratio
-        self.X = self.split_data(self.X_train)
-        self.Y = self.split_data(self.Y_train)
-
         self.kappa = kappa
         self.alpha = alpha
         self.LAMBDA = LAMBDA
+
+        super().__init__(**kwargs)
 
         if alpha == 0:
             if kappa == 1:
@@ -87,6 +55,9 @@ class LogisticRegression(Problem):
             self.L = 1 + self.LAMBDA + 6 * self.alpha
             self.sigma = self.LAMBDA + 2 * self.alpha
 
+    def init(self):
+        super().init()
+
         if self.kappa is not None:
             self.x_min = self.w_min = opt.minimize(
                 self.f,
@@ -97,23 +68,31 @@ class LogisticRegression(Problem):
             ).x
             self.f_min = self.f(self.w_min)
 
-        '''
-    def _generate_data(self, find_minimum=True):
-        # Generate data
-        X = np.random.randn(self.m_total, self.dim)
-        norm = np.sqrt(np.linalg.norm(X.T.dot(X), 2) / self.m_total)
-        X /= norm
-        self.X_train = X
+    def generate_data(self):
+        def _generate_data(m_total, dim, noise_ratio, m_test=None):
+            if m_test is None:
+                m_test = int(m_total / 10)
 
-        # Generate labels
-        w_0 = np.random.rand(self.dim)
-        Y_0_total = logit_1d(self.X_train, w_0)
-        Y_0_total[Y_0_total > 0.5] = 1
-        Y_0_total[Y_0_total <= 0.5] = 0
+            # Generate data
+            X = np.random.randn(m_total + m_test, dim)
+            norm = np.sqrt(2 * np.linalg.norm(X.T.dot(X), 2) / (m_total + m_test))
+            X /= 2 * norm
 
-        noise = np.random.binomial(1, self.noise_ratio, self.m_total)
-        self.Y_train = np.multiply(noise - Y_0_total, noise) + np.multiply(Y_0_total, 1 - noise)
-        '''
+            # Generate labels
+            w_0 = np.random.rand(dim)
+            Y = logit_1d_np(X, w_0)
+            Y[Y > 0.5] = 1
+            Y[Y <= 0.5] = 0
+
+            X_train, X_test = X[:m_total], X[m_total:]
+            Y_train, Y_test = Y[:m_total], Y[m_total:]
+
+            noise = np.random.binomial(1, noise_ratio, m_total)
+            Y_train = (noise - Y_train) * noise + Y_train * (1 - noise)
+            return X_train, Y_train, X_test, Y_test, w_0
+
+        self.X_train, self.Y_train, self.X_test, self.Y_test, self.w_0 = _generate_data(self.n_agent * self.m, self.dim, self.noise_ratio)
+
 
     def grad_h(self, w, i=None, j=None):
         '''Gradient of h(x) at w. Depending on the shape of w and parameters i and j, this function behaves differently:
@@ -149,7 +128,7 @@ class LogisticRegression(Problem):
         elif w.ndim == 2:
             if i is None and j is None:  # Return the distributed gradient
                 tmp = logit_2d(self.X, w) - self.Y
-                return np.einsum('ikj,ik->ji', self.X, tmp) / self.m + w * self.LAMBDA
+                return xp.einsum('ikj,ik->ji', self.X, tmp) / self.m + w * self.LAMBDA
             elif i is None and j is not None:  # Return the stochastic gradient
                 res = []
                 for i in range(self.n_agent):
@@ -158,27 +137,36 @@ class LogisticRegression(Problem):
                     else:
                         samples = j[i]
                     res.append(self.X[i][samples].T.dot(logit_1d(self.X[i][samples], w[:, i]) - self.Y[i][samples]) / len(samples) + w[:, i] * self.LAMBDA)
-                return np.array(res).T
+                return xp.array(res).T
             else:
                 log.fatal('For distributed gradients j must be None')
         else:
             log.fatal('Parameter dimension should only be 1 or 2')
 
-    def h(self, w, i=None, j=None):
+    def h(self, w, i=None, j=None, split='train'):
         '''Function value at w. If i is None, returns f(x); if i is not None but j is, returns the function value in the i-th machine; otherwise,return the function value of j-th sample in i-th machine.'''
 
+        if split == 'train':
+            X = self.X_train
+            Y = self.Y_train
+        elif split == 'test':
+            if w.ndim > 1 or i is not None or j is not None:
+                log.fatal("Function value on test set only applies to one parameter vector")
+            X = self.X_test
+            Y = self.Y_test
+
         if i is None:  # Return the function value
-            tmp = self.X_train.dot(w)
-            return -np.sum(
-                (self.Y_train - 1) * tmp - np.log(1 + np.exp(-tmp))
-            ) / self.m_total + np.sum(w**2) * self.LAMBDA / 2
+            tmp = X.dot(w)
+            return -xp.sum(
+                (Y - 1) * tmp - xp.log(1 + xp.exp(-tmp))
+            ) / X.shape[0] + xp.sum(w**2) * self.LAMBDA / 2
 
         elif j is None:  # Return the function value in machine i
             tmp = self.X[i].dot(w)
-            return -np.sum((self.Y[i] - 1) * tmp - np.log(1 + np.exp(-tmp))) / self.m + np.sum(w**2) * self.LAMBDA / 2
+            return -xp.sum((self.Y[i] - 1) * tmp - xp.log(1 + xp.exp(-tmp))) / self.m + xp.sum(w**2) * self.LAMBDA / 2
         else:  # Return the gradient of sample j in machine i
             tmp = self.X[i][j].dot(w)
-            return -((self.Y[i][j] - 1) * tmp - np.log(1 + np.exp(-tmp))) + np.sum(w**2) * self.LAMBDA / 2
+            return -((self.Y[i][j] - 1) * tmp - xp.log(1 + xp.exp(-tmp))) + xp.sum(w**2) * self.LAMBDA / 2
 
     def accuracy(self, w, split='train'):
         if len(w.shape) > 1:
@@ -195,27 +183,4 @@ class LogisticRegression(Problem):
         Y_hat = X.dot(w)
         Y_hat[Y_hat > 0] = 1
         Y_hat[Y_hat <= 0] = 0
-        return np.mean(Y_hat == Y)
-
-
-if __name__ == '__main__':
-
-    n = 10
-    m = 1000
-    dim = 10
-    noise_ratio = 0.01
-
-    p = LogisticRegression(n, m, dim, noise_ratio=noise_ratio, balanced=False)
-    p.grad_check()
-    p.distributed_check()
-
-    p = LogisticRegression(n, m, dim, noise_ratio=noise_ratio, n_edges=4 * n)
-    p.grad_check()
-    p.distributed_check()
-    # p.plot_graph()
-
-    print('w_min = ' + str(p.w_min))
-    print('f(w_min) = ' + str(p.f(p.w_min)))
-    print('f_0(w_min) = ' + str(p.f(p.w_min, 0)))
-    print('|| g(w_min) || = ' + str(np.linalg.norm(p.grad(p.w_min))))
-    print('|| g_0(w_min) || = ' + str(np.linalg.norm(p.grad(p.w_min, 0))))
+        return xp.mean(Y_hat == Y)

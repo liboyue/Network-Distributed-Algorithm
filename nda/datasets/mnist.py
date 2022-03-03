@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding=utf-8
-import numpy as np
 import os
+import numpy as np
 from sklearn.datasets import fetch_openml
 from nda.datasets import Dataset
 
@@ -19,7 +19,11 @@ class MNIST(Dataset):
 
         # Split to train & test
         n_train = 60000
-        X_train, X_test = X[:n_train], X[n_train:]
-        Y_train, Y_test = Y[:n_train], Y[n_train:]
 
-        return X_train, Y_train, X_test, Y_test
+        self.X_train, self.X_test = X[:n_train], X[n_train:]
+        self.Y_train, self.Y_test = Y[:n_train], Y[n_train:]
+
+    def normalize_data(self):
+        self.X_train /= 255
+        self.X_test /= 255
+        super().normalize_data()

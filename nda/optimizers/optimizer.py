@@ -1,9 +1,16 @@
 #!/usr/bin/env python
 # coding=utf-8
 import numpy as np
-from numpy.linalg import norm
+
+try:
+    import cupy as xp
+except ModuleNotFoundError:
+    import numpy as xp
+
+norm = xp.linalg.norm
 
 from nda.optimizers.utils import eps
+from nda import log
 
 
 def relative_error(w, w_0):
@@ -13,21 +20,24 @@ def relative_error(w, w_0):
 class Optimizer(object):
     '''The base optimizer class, which handles logging, convergence/divergence checking.'''
 
-    def __init__(self, p, n_iters=100, x_0=None, W=None, save_metric_frequency=1, is_distributed=True, verbose=False):
+    def __init__(self, p, n_iters=100, x_0=None, W=None, save_metric_frequency=1, is_distributed=True, extra_metrics=[], early_stopping=True, grad_eps=eps, var_eps=eps):
 
         self.name = self.__class__.__name__
         self.p = p
         self.n_iters = n_iters
-        self.verbose = verbose
         self.save_metric_frequency = save_metric_frequency
         self.save_metric_counter = 0
         self.is_distributed = is_distributed
+        self.early_stopping = early_stopping
+        self.grad_eps = grad_eps
+        self.var_eps = var_eps
+        self.is_initialized = False
 
         if W is not None:
-            self.W = W
+            self.W = np.array(W)
 
         if x_0 is not None:
-            self.x_0 = x_0
+            self.x_0 = np.array(x_0)
         else:
             if self.is_distributed:
                 self.x_0 = np.random.rand(p.dim, p.n_agent)
@@ -41,16 +51,28 @@ class Optimizer(object):
         self.n_grads = 0
         self.metrics = []
         self.history = []
-        self.metrics_columns = ['t', 'n_grads', 'f']
-        if self.p.f_min is not None:
-            self.metrics_columns += ['var_error']
-        if hasattr(self.p, 'accuracy'):
-            self.metrics_columns += ['train_accuracy', 'test_accuracy']
+        self.metric_names = ['t', 'n_grads', 'f']
         if self.is_distributed:
-            self.metrics_columns += ['comm_rounds']
+            self.metric_names += ['comm_rounds']
+        self.metric_names += extra_metrics
 
-    def f(self, w, i=None, j=None):
-        return self.p.f(w, i, j)
+    def init(self):
+
+        log.debug("Initializing optimizer")
+
+        if self.p.is_initialized is False:
+            self.p.init()
+
+        if self.p.x_min is not None:
+            self.metric_names += ['var_error']
+
+        if xp.__name__ == 'cupy':
+            for var in ['W', 'x_0', 'x']:
+                if hasattr(self, var):
+                    setattr(self, var, xp.array(getattr(self, var)))
+
+    def f(self, *args, **kwargs):
+        return self.p.f(*args, **kwargs)
 
     def grad(self, w, i=None, j=None):
         '''Gradient wrapper. Provide logging function.'''
@@ -76,7 +98,7 @@ class Optimizer(object):
             if j is None:
                 self.n_grads += self.p.m_total  # Works for agents is list or integer
             elif j is not None:
-                if type(j) is np.ndarray:
+                if type(j) is xp.ndarray:
                     self.n_grads += j.size
                 elif type(j) is list:
                     self.n_grads += sum([1 if type(j[i]) is int else len(j[i]) for i in range(self.p.n_agent)])
@@ -92,16 +114,6 @@ class Optimizer(object):
 
         return self.p.grad_g(w)
 
-    def init(self):
-        pass
-
-    def save_history(self, x=None):
-        if self.verbose is False:
-            return
-        if x is None:
-            x = self.x
-        self.history.append({'x': x.copy()})
-
     def save_metrics(self, x=None):
 
         self.save_metric_counter %= self.save_metric_frequency
@@ -113,42 +125,53 @@ class Optimizer(object):
         if x.ndim > 1:
             x = x.mean(axis=1)
 
-        metrics = [self.t, self.n_grads, self.f(x)]
+        def _get_metrics(metric_name):
 
-        if 'var_error' in self.metrics_columns:
-            metrics.append(relative_error(x, self.p.x_min))
+            if metric_name == 't':
+                res = self.t
+            elif metric_name == 'comm_rounds':
+                res = self.comm_rounds
+            elif metric_name == 'n_grads':
+                res = self.n_grads
+            elif metric_name == 'f':
+                res = self.f(x)
+            elif metric_name == 'f_test':
+                res = self.f(x, split='test')
+            elif metric_name == 'var_error':
+                res = relative_error(x, self.p.x_min)
+            elif metric_name == 'train_accuracy':
+                acc = self.p.accuracy(x, split='train')
+                if type(acc) is tuple:
+                    acc = acc[0]
+                res = acc
+            elif metric_name == 'test_accuracy':
+                acc = self.p.accuracy(x, split='test')
+                if type(acc) is tuple:
+                    acc = acc[0]
+                res = acc
+            elif metric_name == 'grad_norm':
+                res = norm(self.p.grad(x))
+            else:
+                raise NotImplementedError(f'Metric {metric_name} is not implemented')
 
-        if 'train_accuracy' in self.metrics_columns:
-            acc = self.p.accuracy(x, split='train')
-            if type(acc) is tuple:
-                acc = acc[0]
-            metrics.append(acc)
-        if 'test_accuracy' in self.metrics_columns:
-            acc = self.p.accuracy(x, split='test')
-            if type(acc) is tuple:
-                acc = acc[0]
-            metrics.append(acc)
+            return res
 
-        if 'comm_rounds' in self.metrics_columns:
-            metrics.append(self.comm_rounds)
 
-        self.metrics.append(metrics)
+        self.metrics.append(list(map(_get_metrics, self.metric_names)))
 
     def get_metrics(self):
-        return self.metrics_columns, np.array(self.metrics)
-
-    def get_history(self):
-        return self.history
+        self.metrics = [[_metric.item() if type(_metric) is xp.ndarray else _metric for _metric in _metrics] for _metrics in self.metrics]
+        return self.metric_names, np.array(self.metrics)
 
     def get_name(self):
         return self.name
 
     def optimize(self):
-        self.init()
+        if self.is_initialized is False:
+            self.init()
 
         # Initial value
         self.save_metrics()
-        self.save_history()
 
         for self.t in range(1, self.n_iters + 1):
 
@@ -159,9 +182,8 @@ class Optimizer(object):
             self.update()
 
             self.save_metrics()
-            self.save_history()
 
-            if self.check_stopping_conditions() is True:
+            if self.early_stopping is True and self.check_stopping_conditions() is True:
                 break
 
         # endfor
@@ -179,15 +201,18 @@ class Optimizer(object):
         else:
             x = self.x
 
-        if norm(self.p.grad(x)) < eps:
+        if norm(self.p.grad(x)) < self.grad_eps:
+            log.info('Gradient norm converged')
             return True
 
         if self.p.x_min is not None:
-            distance = norm(x - self.p.x_min)
-            if distance < eps:
+            distance = norm(x - self.p.x_min) / norm(self.p.x_min)
+            if distance < self.var_eps:
+                log.info('Variable converged')
                 return True
 
             if distance > 5:
+                log.info('Diverged')
                 return True
 
         return False

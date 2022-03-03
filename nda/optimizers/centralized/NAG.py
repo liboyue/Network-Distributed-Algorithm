@@ -17,6 +17,9 @@ class NAG(Optimizer):
             log.error('NAG only supports strongly convex')
 
     def init(self):
+
+        super().init()
+
         if self.p.sigma > 0:
             self.x = self.y = self.x_0
             root_kappa = np.sqrt(self.p.L / self.p.sigma)
