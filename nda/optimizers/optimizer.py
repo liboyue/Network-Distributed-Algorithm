@@ -4,13 +4,13 @@ import numpy as np
 
 try:
     import cupy as xp
-except ModuleNotFoundError:
+except ImportError:
     import numpy as xp
-
-norm = xp.linalg.norm
 
 from nda.optimizers.utils import eps
 from nda import log
+
+norm = xp.linalg.norm
 
 
 def relative_error(w, w_0):
@@ -67,9 +67,11 @@ class Optimizer(object):
             self.metric_names += ['var_error']
 
         if xp.__name__ == 'cupy':
-            for var in ['W', 'x_0', 'x']:
-                if hasattr(self, var):
-                    setattr(self, var, xp.array(getattr(self, var)))
+            for k in self.__dict__:
+                if type(self.__dict__[k]) == np.ndarray:
+                    self.__dict__[k] = xp.array(self.__dict__[k])
+
+            self.is_initialized = True
 
     def f(self, *args, **kwargs):
         return self.p.f(*args, **kwargs)
@@ -114,6 +116,37 @@ class Optimizer(object):
 
         return self.p.grad_g(w)
 
+    def compute_metric(self, metric_name, x):
+
+        if metric_name == 't':
+            res = self.t
+        elif metric_name == 'comm_rounds':
+            res = self.comm_rounds
+        elif metric_name == 'n_grads':
+            res = self.n_grads
+        elif metric_name == 'f':
+            res = self.f(x)
+        elif metric_name == 'f_test':
+            res = self.f(x, split='test')
+        elif metric_name == 'var_error':
+            res = relative_error(x, self.p.x_min)
+        elif metric_name == 'train_accuracy':
+            acc = self.p.accuracy(x, split='train')
+            if type(acc) is tuple:
+                acc = acc[0]
+            res = acc
+        elif metric_name == 'test_accuracy':
+            acc = self.p.accuracy(x, split='test')
+            if type(acc) is tuple:
+                acc = acc[0]
+            res = acc
+        elif metric_name == 'grad_norm':
+            res = norm(self.p.grad(x))
+        else:
+            raise NotImplementedError(f'Metric {metric_name} is not implemented')
+
+        return res
+
     def save_metrics(self, x=None):
 
         self.save_metric_counter %= self.save_metric_frequency
@@ -125,39 +158,9 @@ class Optimizer(object):
         if x.ndim > 1:
             x = x.mean(axis=1)
 
-        def _get_metrics(metric_name):
-
-            if metric_name == 't':
-                res = self.t
-            elif metric_name == 'comm_rounds':
-                res = self.comm_rounds
-            elif metric_name == 'n_grads':
-                res = self.n_grads
-            elif metric_name == 'f':
-                res = self.f(x)
-            elif metric_name == 'f_test':
-                res = self.f(x, split='test')
-            elif metric_name == 'var_error':
-                res = relative_error(x, self.p.x_min)
-            elif metric_name == 'train_accuracy':
-                acc = self.p.accuracy(x, split='train')
-                if type(acc) is tuple:
-                    acc = acc[0]
-                res = acc
-            elif metric_name == 'test_accuracy':
-                acc = self.p.accuracy(x, split='test')
-                if type(acc) is tuple:
-                    acc = acc[0]
-                res = acc
-            elif metric_name == 'grad_norm':
-                res = norm(self.p.grad(x))
-            else:
-                raise NotImplementedError(f'Metric {metric_name} is not implemented')
-
-            return res
-
-
-        self.metrics.append(list(map(_get_metrics, self.metric_names)))
+        self.metrics.append(
+            [self.compute_metric(name, x) for name in self.metric_names]
+        )
 
     def get_metrics(self):
         self.metrics = [[_metric.item() if type(_metric) is xp.ndarray else _metric for _metric in _metrics] for _metrics in self.metrics]
