@@ -15,7 +15,7 @@ class DANE(Optimizer):
         self.delta = delta
 
     def update(self):
-        self.comm_rounds += 1
+        self.comm_rounds += 2
 
         grad_x = self.grad_h(self.x)
 
