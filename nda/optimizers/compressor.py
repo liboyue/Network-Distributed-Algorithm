@@ -1,6 +1,6 @@
 try:
     import cupy as xp
-except ModuleNotFoundError:
+except ImportError:
     import numpy as xp
 
 # import numpy as np

@@ -2,7 +2,7 @@
 # coding=utf-8
 try:
     import cupy as xp
-except ModuleNotFoundError:
+except ImportError:
     import numpy as xp
 
 
@@ -19,10 +19,7 @@ class ADMM(Optimizer):
         self.local_optimizer = local_optimizer
         self.local_n_iters = local_n_iters
         self.delta = delta
-
-    def init(self):
-        super().init()
-        self.Lambda = xp.random.rand(self.p.dim, self.p.n_agent)
+        self.Lambda = np.random.rand(self.p.dim, self.p.n_agent)
 
     def update(self):
         self.comm_rounds += 1

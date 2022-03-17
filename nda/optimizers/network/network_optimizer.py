@@ -4,13 +4,13 @@ import numpy as np
 
 try:
     import cupy as xp
-except ModuleNotFoundError:
+except ImportError:
     import numpy as xp
-
-norm = xp.linalg.norm
 
 import matplotlib.pyplot as plt
 from nda.optimizers import Optimizer
+
+norm = xp.linalg.norm
 
 
 class NetworkOptimizer(Optimizer):

@@ -2,7 +2,7 @@
 # coding=utf-8
 try:
     import cupy as np
-except ModuleNotFoundError:
+except ImportError:
     import numpy as np
 
 from nda.optimizers import Optimizer
@@ -30,10 +30,8 @@ class CHOCO_SGD(Optimizer):
         else:
             self.Q = compressor.identity
 
-
         self.x_hat = np.zeros_like(self.x)
         self.W_shifted = self.W - np.eye(self.p.n_agent)
-        
 
     def update(self):
         self.comm_rounds += 1

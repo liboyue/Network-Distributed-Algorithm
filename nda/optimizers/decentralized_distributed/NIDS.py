@@ -2,7 +2,7 @@
 # coding=utf-8
 try:
     import cupy as np
-except ModuleNotFoundError:
+except ImportError:
     import numpy as np
 
 from nda.optimizers import Optimizer

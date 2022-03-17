@@ -4,7 +4,7 @@ import numpy as np
 
 try:
     import cupy as xp
-except ModuleNotFoundError:
+except ImportError:
     import numpy as xp
 
 from nda.optimizers import Optimizer

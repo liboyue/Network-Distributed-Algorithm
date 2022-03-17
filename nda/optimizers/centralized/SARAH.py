@@ -1,10 +1,8 @@
 #!/usr/bin/env python
 # coding=utf-8
-import numpy as np
-
 try:
     import cupy as xp
-except ModuleNotFoundError:
+except ImportError:
     import numpy as xp
 
 from nda.optimizers import Optimizer
@@ -32,7 +30,6 @@ class SARAH(Optimizer):
             n_inner_iters = xp.random.randint(1, self.n_inner_iters + 1)
             if type(n_inner_iters) is xp.ndarray:
                 n_inner_iters = n_inner_iters.item()
-
 
         sample_list = xp.random.randint(0, self.p.m_total, (n_inner_iters, self.batch_size))
         for i in range(n_inner_iters - 1):
