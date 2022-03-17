@@ -91,7 +91,6 @@ def run_exp(exps, kappa=None, max_iter=None, name=None, save=False, plot=True, n
             pp, task_id, exp = None, None, None
         else:
             time.sleep(0.1)
-            
 
     while len(pool) > 0:
         _remove_dead_process()
@@ -159,7 +158,7 @@ def plot_iters(results, path=None, kappa=None, max_iter=None, save=False):
             if 'var_error' in result.columns:
                 legends.append(name)
                 plt.loglog(result.t, result.var_error, style)
-        plt.ylabel(r"Loss")
+        plt.ylabel(r"$\frac{f({\bar{\mathbf{x}}}^{(t)}) - f({\mathbf{x}}^\star)}{f({\mathbf{x}}^\star)}$")
         plt.xlabel('#outer iterations')
 
         if kappa is not None:
@@ -180,7 +179,7 @@ def plot_iters(results, path=None, kappa=None, max_iter=None, save=False):
         result = result.loc[mask]
         plt.loglog(result.t, result.f, style)
     # plt.title('Function value error vs. #outer iterations')
-    plt.ylabel(r"$\frac{f({\bar{\mathbf{x}}}^{(t)}) - f({\mathbf{x}}^\star)}{f({\mathbf{x}}^\star)}$")
+    plt.ylabel(r"Loss")
     plt.xlabel('#outer iterations')
     if kappa is not None:
         plt.title(r"$\kappa$ = " + str(int(kappa)))
