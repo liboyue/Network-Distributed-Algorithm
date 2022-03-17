@@ -4,7 +4,7 @@ import numpy as np
 
 try:
     import cupy as xp
-except ModuleNotFoundError:
+except ImportError:
     import numpy as xp
 
 import networkx as nx
@@ -22,13 +22,15 @@ def NAG(grad, x_0, L, sigma, n_iters=100, eps=eps):
     r_1 = 1 + r
     r_2 = r
 
-    for t in range(1, n_iters + 1):
+    for t in range(n_iters):
         y_last = y
-        y = x - grad(x) / L
-        x = r_1*y - r_2*y_last
 
-        if xp.linalg.norm(y) < eps:
+        _grad = grad(x)
+        if xp.linalg.norm(_grad) < eps:
             break
+
+        y = x - _grad / L
+        x = r_1*y - r_2*y_last
 
     return y, t
 
@@ -38,10 +40,12 @@ def GD(grad, x_0, eta, n_iters=100, eps=eps):
 
     x = x_0
     for t in range(n_iters):
-        x -= eta * grad(x)
 
-        if xp.linalg.norm(x) < eps:
+        _grad = grad(x)
+        if xp.linalg.norm(_grad) < eps:
             break
+
+        x -= eta * _grad
 
     return x, t + 1
 
@@ -53,12 +57,13 @@ def Sub_GD(grad, x_0, n_iters=100, eps=eps):
     x = x_0
     for t in range(n_iters):
         eta_t = R / xp.sqrt(t)
+
         g_t = grad(x)
+        if xp.linalg.norm(g_t) < eps:
+            break
+
         g_t /= xp.linalg.norm(g_t)
         x -= eta_t * g_t
-
-        if xp.linalg.norm(grad(x)) < eps:
-            break
 
     return x, t + 1
 
@@ -76,13 +81,15 @@ def FISTA(grad_f, x_0, L, LAMBDA, n_iters=100, eps=1e-10):
     y = x_0.copy()
 
     for t in range(1, n_iters):
-        x -= grad_f(x) / L
+
+        _grad = grad_f(x)
+        if xp.linalg.norm(_grad) < eps:
+            break
+
+        x -= _grad / L
         y_new = xp.sign(x) * xp.maximum(xp.abs(x) - LAMBDA/L, 0)
         x = (1 - gamma[t]) * y_new + gamma[t] * y
         y = y_new
-
-        if xp.linalg.norm(grad_f(y)) < eps:
-            break
 
     return y, t + 1
 
