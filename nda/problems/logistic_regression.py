@@ -4,19 +4,21 @@ import numpy as np
 
 try:
     import cupy as xp
-except ModuleNotFoundError:
+except ImportError:
     import numpy as xp
 
-from scipy import optimize as opt
-from nda import log, datasets
+from nda import log
 from nda.problems import Problem
+from nda.optimizers.utils import NAG
 
 
 def logit_1d(X, w):
     return 1 / (1 + xp.exp(-X.dot(w)))
 
+
 def logit_1d_np(X, w):
     return 1 / (1 + np.exp(-X.dot(w)))
+
 
 def logit_2d(X, w):
     tmp = xp.einsum('ijk,ki->ij', X, w)
@@ -50,23 +52,22 @@ class LogisticRegression(Problem):
             elif kappa is not None:
                 self.LAMBDA = 1 / (self.kappa - 1)
             self.L = 1 + self.LAMBDA
-            self.sigma = self.LAMBDA if self.LAMBDA != 0 else None 
+            self.sigma = self.LAMBDA if self.LAMBDA != 0 else None
         else:
             self.L = 1 + self.LAMBDA + 6 * self.alpha
             self.sigma = self.LAMBDA + 2 * self.alpha
 
     def init(self):
-        super().init()
 
-        if self.kappa is not None:
-            self.x_min = self.w_min = opt.minimize(
-                self.f,
-                np.random.rand(self.dim),
-                jac=self.grad,
-                method='BFGS',
-                options={'gtol': 1e-8}
-            ).x
-            self.f_min = self.f(self.w_min)
+        if not self.is_initialized:
+
+            super().init()
+
+            if self.kappa is not None:
+                x_min, _ = NAG(self.grad, xp.random.randn(self.dim), self.L, self.sigma)
+                self.x_min = self.w_min = x_min
+                self.f_min = self.f(self.w_min)
+                log.info(f'f_min = {self.f_min}')
 
     def generate_data(self):
         def _generate_data(m_total, dim, noise_ratio, m_test=None):
@@ -93,7 +94,6 @@ class LogisticRegression(Problem):
 
         self.X_train, self.Y_train, self.X_test, self.Y_test, self.w_0 = _generate_data(self.n_agent * self.m, self.dim, self.noise_ratio)
 
-
     def grad_h(self, w, i=None, j=None):
         '''Gradient of h(x) at w. Depending on the shape of w and parameters i and j, this function behaves differently:
         1. If w is a vector of shape (dim,)
@@ -113,6 +113,7 @@ class LogisticRegression(Problem):
                 returns the gradient of each parameter of the j-th sample at the corresponding agent.
             Note j can be lists of lists or vectors.
         '''
+
         if w.ndim == 1:
             if type(j) is int:
                 j = [j]
@@ -158,17 +159,18 @@ class LogisticRegression(Problem):
         if i is None:  # Return the function value
             tmp = X.dot(w)
             return -xp.sum(
-                (Y - 1) * tmp - xp.log(1 + xp.exp(-tmp))
+                (Y - 1) * tmp - xp.log1p(xp.exp(-tmp))
             ) / X.shape[0] + xp.sum(w**2) * self.LAMBDA / 2
 
         elif j is None:  # Return the function value in machine i
             tmp = self.X[i].dot(w)
-            return -xp.sum((self.Y[i] - 1) * tmp - xp.log(1 + xp.exp(-tmp))) / self.m + xp.sum(w**2) * self.LAMBDA / 2
+            return -xp.sum((self.Y[i] - 1) * tmp - xp.log1p(xp.exp(-tmp))) / self.m + xp.sum(w**2) * self.LAMBDA / 2
         else:  # Return the gradient of sample j in machine i
             tmp = self.X[i][j].dot(w)
-            return -((self.Y[i][j] - 1) * tmp - xp.log(1 + xp.exp(-tmp))) + xp.sum(w**2) * self.LAMBDA / 2
+            return -((self.Y[i][j] - 1) * tmp - xp.log1p(xp.exp(-tmp))) + xp.sum(w**2) * self.LAMBDA / 2
 
     def accuracy(self, w, split='train'):
+
         if len(w.shape) > 1:
             w = w.mean(axis=1)
         if split == 'train':

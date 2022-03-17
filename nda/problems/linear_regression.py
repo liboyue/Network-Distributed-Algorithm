@@ -4,11 +4,12 @@ import numpy as np
 
 try:
     import cupy as xp
-except ModuleNotFoundError:
+except ImportError:
     import numpy as xp
 
 from nda import log
 from nda.problems import Problem
+
 
 class LinearRegression(Problem):
     '''f(w) = 1/n \sum f_i(w) + r * g(w) = 1/n \sum 1/2m || Y_i - X_i w ||^2 + r * g(w)'''
@@ -17,7 +18,7 @@ class LinearRegression(Problem):
 
         self.noise_variance = noise_variance
         self.kappa = kappa
- 
+
         super().__init__(**kwargs)
 
         # Pre-calculate matrix products to accelerate gradient and function value evaluations
@@ -26,29 +27,24 @@ class LinearRegression(Problem):
 
         self.X_T_Y = self.X_train.T.dot(self.Y_train) / self.m_total
         self.X_T_Y_list = np.einsum('ikj,ik->ij', self.X, self.Y) / self.m
-
-        self.f_min = None
+        log.info('beta = %.4f', np.linalg.norm(self.H_list - self.H, ord=2, axis=(1, 2)).max())
 
     def init(self):
 
-        super().init()
-        if xp.__name__ == 'cupy':
-            for var in ['H', 'H_list', 'X_T_Y', 'X_T_Y_list']:
-                if hasattr(self, var):
-                    setattr(self, var, xp.array(getattr(self, var)))
- 
-        if self.is_smooth is True:
-            self.x_min = self.w_min = xp.linalg.solve(self.X_train.T.dot(self.X_train) + 2 * self.m_total * self.r * xp.eye(self.dim), self.X_train.T.dot(self.Y_train))
-        else:
-            from nda.optimizers.utils import FISTA
-            self.x_min, _ = FISTA(self.grad_h, xp.random.randn(self.dim), self.L, self.r, n_iters=100000)
-            self.w_min = self.x_min
+        if not self.is_initialized:
 
-        self.f_min = self.f(self.x_min)
-        log.info('beta = %.4f', xp.linalg.norm(self.H_list - self.H, ord=2, axis=(1, 2)).max())
-        self.is_initialized = True
-        log.info(f'f_min = {self.f_min}')
+            super().init()
 
+            if self.is_smooth is True:
+                self.x_min = self.w_min = xp.linalg.solve(self.X_train.T.dot(self.X_train) + 2 * self.m_total * self.r * xp.eye(self.dim), self.X_train.T.dot(self.Y_train))
+
+            else:
+                from nda.optimizers.utils import FISTA
+                self.x_min, _ = FISTA(self.grad_h, xp.random.randn(self.dim), self.L, self.r, n_iters=100000)
+                self.w_min = self.x_min
+
+            self.f_min = self.f(self.x_min)
+            log.info(f'f_min = {self.f_min}')
 
     def generate_data(self):
 
@@ -74,7 +70,6 @@ class LinearRegression(Problem):
         self.x_0 = self.w_0 = np.random.rand(self.dim)
         self.Y_0_train = self.X_train.dot(self.w_0)
         self.Y_train = self.Y_0_train + np.sqrt(self.noise_variance) * np.random.randn(self.m_total)
-
 
     def grad_h(self, w, i=None, j=None, split='train'):
         '''Gradient of h(x) at w. Depending on the shape of w and parameters i and j, this function behaves differently:
@@ -111,7 +106,7 @@ class LinearRegression(Problem):
 
         elif w.ndim == 2:
             if i is None and j is None:  # Return the distributed gradient
-                return np.einsum('ijk,ki->ji', self.H_list, w) - self.X_T_Y_list.T
+                return xp.einsum('ijk,ki->ji', self.H_list, w) - self.X_T_Y_list.T
             elif i is None and j is not None:  # Return the stochastic gradient
                 res = []
                 for i in range(self.n_agent):
@@ -120,7 +115,7 @@ class LinearRegression(Problem):
                     else:
                         samples = j[i]
                     res.append((self.X[i][samples].dot(w[:, i]) - self.Y[i][samples]).dot(self.X[i][samples]) / len(samples))
-                return np.array(res).T
+                return xp.array(res).T
             else:
                 log.fatal('For distributed gradients j must be None')
         else:
@@ -130,13 +125,12 @@ class LinearRegression(Problem):
         '''Function value of h(x) at w. If i is None, returns h(x); if i is not None but j is, returns the function value at the i-th machine; otherwise,return the function value of j-th sample at the i-th machine.'''
 
         if i is None and j is None:  # Return the function value
-            Z = np.sqrt(2 * self.m_total)
-            return np.sum((self.Y_train / Z - (self.X_train / Z).dot(w)) ** 2)
+            Z = xp.sqrt(2 * self.m_total)
+            return xp.sum((self.Y_train / Z - (self.X_train / Z).dot(w)) ** 2)
         elif i is not None and j is None:  # Return the function value at machine i
-            # return np.sum( (self.Y[i] - self.X[i].dot(w))**2 ) / 2 / self.m[i]
-            return np.sum((self.Y[i] - self.X[i].dot(w)) ** 2) / 2 / self.m
+            return xp.sum((self.Y[i] - self.X[i].dot(w)) ** 2) / 2 / self.m
         elif i is not None and j is not None:  # Return the function value of sample j at machine i
-            return np.sum((self.Y[i][j] - self.X[i][j].dot(w)) ** 2) / 2
+            return xp.sum((self.Y[i][j] - self.X[i][j].dot(w)) ** 2) / 2
         else:
             log.fatal('When i is None, j mush be None')
 
@@ -148,4 +142,4 @@ class LinearRegression(Problem):
         elif j is None:  # Return the hessian matrix at machine i
             return self.H_list[i]
         else:  # Return the hessian matrix of sample j at machine i
-            return self.X[i][np.newaxis, j, :].T.dot(self.X[i][np.newaxis, j, :])
+            return self.X[i][xp.newaxis, j, :].T.dot(self.X[i][xp.newaxis, j, :])

@@ -4,8 +4,8 @@ import numpy as np
 
 try:
     import cupy as xp
-except ModuleNotFoundError:
-    import numpy as xp
+except ImportError:
+    xp = np
 
 from nda.problems import Problem
 from nda.datasets import MNIST
@@ -39,14 +39,17 @@ class NN(Problem):
         self.dim = (n_hidden + 1) * (self.img_dim + self.n_class)
 
     def init(self):
-        super().init()
 
-        self.Y_train_labels = self.Y_train.argmax(axis=1)
-        self.Y_test_labels = self.Y_test.argmax(axis=1)
+        if not self.is_initialized:
 
-        # Internal buffers
-        self._dw = xp.zeros(self.dim)
-        self._dw1, self._dw2 = self.unpack_w(self._dw)  # Reference to the internal buffer
+            super().init()
+
+            self.Y_train_labels = self.Y_train.argmax(axis=1)
+            self.Y_test_labels = self.Y_test.argmax(axis=1)
+
+            # Internal buffers
+            self._dw = xp.zeros(self.dim)
+            self._dw1, self._dw2 = self.unpack_w(self._dw)  # Reference to the internal buffer
 
     def unpack_w(self, W):
         # This function returns references
