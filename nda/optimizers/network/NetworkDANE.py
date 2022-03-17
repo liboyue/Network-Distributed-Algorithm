@@ -22,7 +22,6 @@ class NetworkDANE(NetworkOptimizer):
 
                 def _grad(tmp):
                     return self.grad_f(tmp, i) - grad_y + self.s[:, i] + self.mu * (tmp - self.y[:, i])
-                # self.x[:, i], count = Sub_GD(_grad, self.y[:, i].copy(), n_iters=self.local_n_iters, eps=1e-10)
                 self.x[:, i], count = FISTA(_grad, self.y[:, i].copy(), self.p.L + self.mu, self.p.r, n_iters=self.local_n_iters, eps=1e-10)
             else:
                 grad_y = self.p.grad(self.y[:, i], i)

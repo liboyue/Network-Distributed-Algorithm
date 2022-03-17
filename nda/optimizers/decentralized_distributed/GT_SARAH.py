@@ -17,11 +17,8 @@ class GT_SARAH(Optimizer):
         self.n_inner_iters = n_inner_iters
         self.batch_size = batch_size
 
-    def init(self):
-        super().init()
-        self.v = xp.zeros((self.p.dim, self.p.n_agent))
-        self.y = xp.zeros((self.p.dim, self.p.n_agent))
-
+        self.v = np.zeros((self.p.dim, self.p.n_agent))
+        self.y = np.zeros((self.p.dim, self.p.n_agent))
 
     def update(self):
 

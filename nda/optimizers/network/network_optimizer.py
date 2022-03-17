@@ -21,23 +21,25 @@ class NetworkOptimizer(Optimizer):
         self.n_mix = n_mix
         self.grad_tracking_batch_size = grad_tracking_batch_size
 
-    def init(self):
-        super().init()
-        W_min_diag = min(xp.diag(self.W))
+        W_min_diag = min(np.diag(self.W))
         tmp = (1 - 1e-1) / (1 - W_min_diag)
-        self.W_s = self.W * tmp + xp.eye(self.p.n_agent) * (1 - tmp)
+        self.W_s = self.W * tmp + np.eye(self.p.n_agent) * (1 - tmp)
 
         # Equivalent mixing matrices after n_mix rounds of mixng
-        self.W = xp.linalg.matrix_power(self.W, self.n_mix)
-        self.W_s = xp.linalg.matrix_power(self.W_s, self.n_mix)
+        self.W = np.linalg.matrix_power(self.W, self.n_mix)
+        self.W_s = np.linalg.matrix_power(self.W_s, self.n_mix)
 
-        self.y = self.x_0.copy()
-        self.s = xp.zeros((self.p.dim, self.p.n_agent))
-        for i in range(self.p.n_agent):
-            self.s[:, i] = self.grad_h(self.y[:, i], i)
+    def init(self):
 
-        self.grad_last = self.s.copy()
+        if not self.is_initialized:
+            super().init()
 
+            self.y = self.x_0.copy()
+            self.s = xp.zeros((self.p.dim, self.p.n_agent))
+            for i in range(self.p.n_agent):
+                self.s[:, i] = self.grad_h(self.y[:, i], i)
+
+            self.grad_last = self.s.copy()
 
     def update(self):
         self.comm_rounds += self.n_mix

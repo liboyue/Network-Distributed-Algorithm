@@ -15,12 +15,9 @@ class EXTRA(Optimizer):
         super().__init__(p, **kwargs)
         self.eta = eta
         self.grad_last = None
-
-    def init(self):
-        super().init()
-        W_min_diag = min(xp.diag(self.W))
+        W_min_diag = min(np.diag(self.W))
         tmp = (1 - 1e-1) / (1 - W_min_diag)
-        self.W_s = self.W * tmp + xp.eye(self.p.n_agent) * (1 - tmp)
+        self.W_s = self.W * tmp + np.eye(self.p.n_agent) * (1 - tmp)
 
     def update(self):
         self.comm_rounds += 1

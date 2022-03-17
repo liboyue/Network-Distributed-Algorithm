@@ -16,16 +16,13 @@ class D2(Optimizer):
         self.eta = eta
         self.grad_last = None
         self.batch_size = batch_size
-
-    def init(self):
-        super().init()
-        self.tilde_W = (self.W + xp.eye(self.p.n_agent)) / 2
+        self.tilde_W = (self.W + np.eye(self.p.n_agent)) / 2
 
     def update(self):
         self.comm_rounds += 1
 
         samples = xp.random.randint(0, self.p.m, (self.p.n_agent, self.batch_size))
-        
+
         if self.t == 1:
             self.grad_last = self.grad(self.x, j=samples)
             tmp = self.x - self.eta * self.grad_last
