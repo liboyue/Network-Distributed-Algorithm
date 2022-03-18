@@ -40,7 +40,7 @@ class Problem(object):
             self.generate_data()
         else:
             from nda import datasets
-            
+
             if dataset == 'gisette':
                 self.X_train, self.Y_train, self.X_test, self.Y_test = datasets.Gisette(normalize=normalize_data).load()
             elif dataset == 'mnist':
@@ -76,7 +76,6 @@ class Problem(object):
         self.X = self.split_data(self.X_train)
         self.Y = self.split_data(self.Y_train)
 
-
         self.generate_graph(graph_type=graph_type, params=graph_params)
 
         if regularization == 'l1':
@@ -87,13 +86,16 @@ class Problem(object):
             self.grad_g = self._grad_regularization_l2
 
     def init(self):
-        log.debug("Initializing problem")
+        if not self.is_initialized:
+            log.debug("Initializing problem")
 
-        if xp.__name__ == 'cupy':
-            for var in ['X', 'Y', 'X_train', 'Y_train', 'X_test', 'Y_test']:
-                if hasattr(self, var):
-                    setattr(self, var, xp.array(getattr(self, var)))
-        self.is_initialized = True
+            # Move every np.array to GPU if needed
+            if xp.__name__ == 'cupy':
+                for k in self.__dict__:
+                    if type(self.__dict__[k]) == np.ndarray:
+                        self.__dict__[k] = xp.array(self.__dict__[k])
+
+            self.is_initialized = True
 
     def split_data(self, X):
         '''Helper function to split data according to the number of training samples per agent.'''
