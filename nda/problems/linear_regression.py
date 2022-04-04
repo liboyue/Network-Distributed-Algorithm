@@ -7,6 +7,8 @@ try:
 except ImportError:
     import numpy as xp
 
+import multiprocessing as mp
+
 from nda import log
 from nda.problems import Problem
 
@@ -23,28 +25,51 @@ class LinearRegression(Problem):
 
         # Pre-calculate matrix products to accelerate gradient and function value evaluations
         self.H = self.X_train.T.dot(self.X_train) / self.m_total
-        self.H_list = np.einsum('ikj,ikl->ijl', self.X, self.X) / self.m
-
         self.X_T_Y = self.X_train.T.dot(self.Y_train) / self.m_total
+
+        if xp.__name__ == 'cupy':
+            log.info('Initializing using GPU')
+            q = mp.Queue(2)
+            pp = mp.Process(target=self._init, args=(q,))
+            pp.start()
+            pp.join()
+            self.x_min = self.w_min = q.get()
+            self.f_min = q.get()
+        else:
+            log.info('Initializing using CPU')
+            self.x_min, self.f_min = self._init()
+
+        # Pre-calculate matrix products to accelerate gradient and function value evaluations
+        # After computing minimum to reduce memory copy
+        self.H_list = np.einsum('ikj,ikl->ijl', self.X, self.X) / self.m
         self.X_T_Y_list = np.einsum('ikj,ik->ij', self.X, self.Y) / self.m
         log.info('beta = %.4f', np.linalg.norm(self.H_list - self.H, ord=2, axis=(1, 2)).max())
+        log.info('Initialization done')
 
-    def init(self):
+    def _init(self, result_queue=None):
 
-        if not self.is_initialized:
+        if xp.__name__ == 'cupy':
+            self.cuda()
 
-            super().init()
+        if self.is_smooth is True:
+            x_min = xp.linalg.solve(self.X_train.T.dot(self.X_train) + 2 * self.m_total * self.r * xp.eye(self.dim), self.X_train.T.dot(self.Y_train))
 
-            if self.is_smooth is True:
-                self.x_min = self.w_min = xp.linalg.solve(self.X_train.T.dot(self.X_train) + 2 * self.m_total * self.r * xp.eye(self.dim), self.X_train.T.dot(self.Y_train))
+        else:
+            from nda.optimizers.utils import FISTA
+            x_min, _ = FISTA(self.grad_h, xp.random.randn(self.dim), self.L, self.r, n_iters=100000)
 
-            else:
-                from nda.optimizers.utils import FISTA
-                self.x_min, _ = FISTA(self.grad_h, xp.random.randn(self.dim), self.L, self.r, n_iters=100000)
-                self.w_min = self.x_min
+        f_min = self.f(x_min)
+        log.info(f'f_min = {f_min}')
 
-            self.f_min = self.f(self.x_min)
-            log.info(f'f_min = {self.f_min}')
+        if xp.__name__ == 'cupy':
+            f_min = f_min.item()
+            x_min = x_min.get()
+
+        if result_queue is not None:
+            result_queue.put(x_min)
+            result_queue.put(f_min)
+
+        return x_min, f_min
 
     def generate_data(self):
 

@@ -33,7 +33,7 @@ class Problem(object):
         self.r = r
         self.graph_params = graph_params
         self.graph_type = graph_type
-        self.is_initialized = False
+        self.dataset = dataset
 
         if dataset == 'random':
             self.m_total = m * n_agent      # Total number of data samples of all agents
@@ -58,7 +58,6 @@ class Problem(object):
             self.Y_train = self.Y_train[:self.m_total]
             self.dim = self.X_train.shape[1]
 
-            self.dataset = dataset
 
         if sort or shuffle:
             if sort:
@@ -85,17 +84,13 @@ class Problem(object):
         elif regularization == 'l2':
             self.grad_g = self._grad_regularization_l2
 
-    def init(self):
-        if not self.is_initialized:
-            log.debug("Initializing problem")
+    def cuda(self):
+        log.debug("Copying data to GPU")
 
-            # Move every np.array to GPU if needed
-            if xp.__name__ == 'cupy':
-                for k in self.__dict__:
-                    if type(self.__dict__[k]) == np.ndarray:
-                        self.__dict__[k] = xp.array(self.__dict__[k])
-
-            self.is_initialized = True
+        # Copy every np.array to GPU if needed
+        for k in self.__dict__:
+            if type(self.__dict__[k]) == np.ndarray:
+                self.__dict__[k] = xp.array(self.__dict__[k])
 
     def split_data(self, X):
         '''Helper function to split data according to the number of training samples per agent.'''

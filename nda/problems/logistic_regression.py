@@ -7,6 +7,8 @@ try:
 except ImportError:
     import numpy as xp
 
+import multiprocessing as mp
+
 from nda import log
 from nda.problems import Problem
 from nda.optimizers.utils import NAG
@@ -57,17 +59,62 @@ class LogisticRegression(Problem):
             self.L = 1 + self.LAMBDA + 6 * self.alpha
             self.sigma = self.LAMBDA + 2 * self.alpha
 
-    def init(self):
-
-        if not self.is_initialized:
-
-            super().init()
-
+        if xp.__name__ == 'cupy':
+            log.info('Initializing using GPU')
+            q = mp.Queue(3)
+            pp = mp.Process(target=self._init, args=(q,))
+            pp.start()
+            pp.join()
+            norm = q.get()
             if self.kappa is not None:
-                x_min, _ = NAG(self.grad, xp.random.randn(self.dim), self.L, self.sigma)
-                self.x_min = self.w_min = x_min
-                self.f_min = self.f(self.w_min)
-                log.info(f'f_min = {self.f_min}')
+                self.x_min = self.w_min = q.get()
+                self.f_min = q.get()
+        else:
+            log.info('Initializing using CPU')
+            norm, self.x_min, self.f_min = self._init()
+
+        self.X_train /= norm
+        self.X_test /= norm
+
+        log.info('Initialization done')
+
+
+    def _init(self, result_queue=None):
+
+        if xp.__name__ == 'cupy':
+            self.cuda()
+
+        log.info('Computing norm')
+        norm = xp.linalg.norm(self.X_train, 2) / (2 * xp.sqrt(self.m_total)) # Upper bound of the hessian
+        self.X_train /= norm
+        self.X /= norm
+
+        if self.kappa is not None:
+            log.info('Computing min')
+            x_min, count = NAG(self.grad, xp.random.randn(self.dim), self.L, self.sigma, n_iters=5000, eps=1e-10)
+            log.info(f'NAG ran for {count} iterations')
+            f_min = self.f(x_min)
+            log.info(f'f_min = {f_min}')
+            log.info(f'grad_f(x_min) = {xp.linalg.norm(self.grad(x_min))}')
+
+        if xp.__name__ == 'cupy':
+            norm = norm.item()
+            if self.kappa is not None:
+                x_min = x_min.get()
+                f_min = f_min.item()
+            else:
+                x_min = f_min = None
+
+        if result_queue is not None:
+            result_queue.put(norm)
+            if self.kappa is not None:
+                result_queue.put(x_min)
+                result_queue.put(f_min)
+
+        if self.kappa is not None:
+            return norm, x_min, f_min
+
+        return norm, None, None
 
     def generate_data(self):
         def _generate_data(m_total, dim, noise_ratio, m_test=None):
@@ -76,8 +123,6 @@ class LogisticRegression(Problem):
 
             # Generate data
             X = np.random.randn(m_total + m_test, dim)
-            norm = np.sqrt(2 * np.linalg.norm(X.T.dot(X), 2) / (m_total + m_test))
-            X /= 2 * norm
 
             # Generate labels
             w_0 = np.random.rand(dim)

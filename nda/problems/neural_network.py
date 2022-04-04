@@ -38,18 +38,18 @@ class NN(Problem):
         self.img_dim = self.X_train.shape[1]
         self.dim = (n_hidden + 1) * (self.img_dim + self.n_class)
 
-    def init(self):
+        self.Y_train_labels = self.Y_train.argmax(axis=1)
+        self.Y_test_labels = self.Y_test.argmax(axis=1)
 
-        if not self.is_initialized:
+        # Internal buffers
+        self._dw = np.zeros(self.dim)
+        self._dw1, self._dw2 = self.unpack_w(self._dw)  # Reference to the internal buffer
 
-            super().init()
+        log.info('Initialization done')
 
-            self.Y_train_labels = self.Y_train.argmax(axis=1)
-            self.Y_test_labels = self.Y_test.argmax(axis=1)
-
-            # Internal buffers
-            self._dw = xp.zeros(self.dim)
-            self._dw1, self._dw2 = self.unpack_w(self._dw)  # Reference to the internal buffer
+    def cuda(self):
+        super().cuda()
+        self._dw1, self._dw2 = self.unpack_w(self._dw)  # Renew the reference
 
     def unpack_w(self, W):
         # This function returns references
@@ -150,3 +150,8 @@ class NN(Problem):
         pred = A2.argmax(axis=1)
 
         return sum(pred == labels) / len(pred), loss
+
+
+if __name__ == '__main__':
+
+    p = NN()
