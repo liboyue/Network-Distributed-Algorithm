@@ -25,7 +25,7 @@ def NAG(grad, x_0, L, sigma, n_iters=100, eps=eps):
     for t in range(n_iters):
         y_last = y
 
-        _grad = grad(x)
+        _grad = grad(y)
         if xp.linalg.norm(_grad) < eps:
             break
 
