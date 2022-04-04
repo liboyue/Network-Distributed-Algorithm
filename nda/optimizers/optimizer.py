@@ -56,22 +56,18 @@ class Optimizer(object):
             self.metric_names += ['comm_rounds']
         self.metric_names += extra_metrics
 
-    def init(self):
-
-        log.debug("Initializing optimizer")
-
-        if self.p.is_initialized is False:
-            self.p.init()
-
         if self.p.x_min is not None:
             self.metric_names += ['var_error']
 
-        if xp.__name__ == 'cupy':
-            for k in self.__dict__:
-                if type(self.__dict__[k]) == np.ndarray:
-                    self.__dict__[k] = xp.array(self.__dict__[k])
+    def cuda(self):
 
-            self.is_initialized = True
+        log.debug("Copying data to GPU")
+
+        self.p.cuda()
+
+        for k in self.__dict__:
+            if type(self.__dict__[k]) == np.ndarray:
+                self.__dict__[k] = xp.array(self.__dict__[k])
 
     def f(self, *args, **kwargs):
         return self.p.f(*args, **kwargs)
@@ -170,16 +166,13 @@ class Optimizer(object):
         return self.name
 
     def optimize(self):
-        if self.is_initialized is False:
-            self.init()
+
+        self.init()
 
         # Initial value
         self.save_metrics()
 
         for self.t in range(1, self.n_iters + 1):
-
-            # Initialized every iteration
-            self.init_iter()
 
             # The actual update step for optimization variable
             self.update()
@@ -193,9 +186,6 @@ class Optimizer(object):
 
         return self.get_metrics()
 
-    def init_iter(self):
-        pass
-
     def check_stopping_conditions(self):
         '''Check stopping conditions'''
 
@@ -204,8 +194,12 @@ class Optimizer(object):
         else:
             x = self.x
 
-        if norm(self.p.grad(x)) < self.grad_eps:
+        grad_norm = norm(self.p.grad(x))
+        if grad_norm < self.grad_eps:
             log.info('Gradient norm converged')
+            return True
+        elif grad_norm > 100:
+            log.info('Gradient norm diverged')
             return True
 
         if self.p.x_min is not None:
@@ -214,11 +208,14 @@ class Optimizer(object):
                 log.info('Variable converged')
                 return True
 
-            if distance > 5:
-                log.info('Diverged')
+            if distance > self.p.dim:
+                log.info('Variable diverged')
                 return True
 
         return False
+
+    def init(self):
+        pass
 
     def update(self):
         pass

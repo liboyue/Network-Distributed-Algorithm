@@ -31,15 +31,14 @@ class NetworkOptimizer(Optimizer):
 
     def init(self):
 
-        if not self.is_initialized:
-            super().init()
+        super().init()
 
-            self.y = self.x_0.copy()
-            self.s = xp.zeros((self.p.dim, self.p.n_agent))
-            for i in range(self.p.n_agent):
-                self.s[:, i] = self.grad_h(self.y[:, i], i)
+        self.y = self.x_0.copy()
+        self.s = xp.zeros((self.p.dim, self.p.n_agent))
+        for i in range(self.p.n_agent):
+            self.s[:, i] = self.grad_h(self.y[:, i], i)
 
-            self.grad_last = self.s.copy()
+        self.grad_last = self.s.copy()
 
     def update(self):
         self.comm_rounds += self.n_mix

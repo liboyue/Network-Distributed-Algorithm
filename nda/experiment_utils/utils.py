@@ -27,6 +27,7 @@ def multi_process_helper(device_id, task_id, opt, res_queue):
         import cupy as cp
         cp.cuda.Device(device=device_id).use()
         cp.random.seed(task_id)
+        opt.cuda()
         opt.optimize()
         columns, metrics = opt.get_metrics()
         name = opt.get_name()

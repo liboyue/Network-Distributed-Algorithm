@@ -49,22 +49,21 @@ class Destress(Optimizer):
 
     def init(self):
 
-        if not self.is_initialized:
-            super().init()
+        super().init()
 
-            # Equivalent mixing matrices after n_mix rounds of mixng
-            # W_min_diag = min(np.diag(self.W))
-            # tmp = (1 - 1e-1) / (1 - W_min_diag)
-            # self.W_s = self.W * tmp + np.eye(self.p.n_agent) * (1 - tmp)
+        # Equivalent mixing matrices after n_mix rounds of mixng
+        # W_min_diag = min(np.diag(self.W))
+        # tmp = (1 - 1e-1) / (1 - W_min_diag)
+        # self.W_s = self.W * tmp + np.eye(self.p.n_agent) * (1 - tmp)
 
-            if len(self.x_0.shape) == 2:
-                self.x = xp.tile(self.x_0.mean(axis=1), (self.p.n_agent, 1)).T
-            else:
-                self.x = self.x_0.copy()
+        if len(self.x_0.shape) == 2:
+            self.x = xp.tile(self.x_0.mean(axis=1), (self.p.n_agent, 1)).T
+        else:
+            self.x = self.x_0.copy()
 
-            self.s = self.grad(self.x)
-            self.s = xp.tile(self.s.mean(axis=1), (self.p.n_agent, 1)).T
-            self.grad_last = self.grad(self.x)
+        self.grad_last = self.grad(self.x)
+        self.s = self.grad_last.copy()
+        self.s = xp.tile(self.s.mean(axis=1), (self.p.n_agent, 1)).T
 
     def local_update(self):
         if self.opt == 1:
