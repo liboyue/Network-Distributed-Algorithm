@@ -5,6 +5,7 @@ try:
 except ImportError:
     import numpy as xp
 
+import numpy as np
 
 from nda.optimizers.utils import NAG, GD, FISTA
 from nda.optimizers import Optimizer
