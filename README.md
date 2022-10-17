@@ -13,11 +13,14 @@ but conclusions remain the same.
 If you find this code useful, please cite our papers:
 
 ```
-@article{li2021destress,
+@article{li2022destress,
   title={DESTRESS: Computation-Optimal and Communication-Efficient Decentralized Nonconvex Finite-Sum Optimization},
   author={Li, Boyue and Li, Zhize and Chi, Yuejie},
-  journal={arXiv preprint arXiv:2110.01165},
-  year={2021}
+  journal={SIAM Journal on Mathematics of Data Science},
+  volume = {4},
+  number = {3},
+  pages = {1031-1051},
+  year={2022}
 }
 ```
 
