@@ -20,7 +20,7 @@ def relative_error(w, w_0):
 class Optimizer(object):
     '''The base optimizer class, which handles logging, convergence/divergence checking.'''
 
-    def __init__(self, p, n_iters=100, x_0=None, W=None, save_metric_frequency=1, is_distributed=True, extra_metrics=[], early_stopping=True, grad_eps=eps, var_eps=eps):
+    def __init__(self, p, n_iters=100, x_0=None, W=None, save_metric_frequency=1, is_distributed=True, extra_metrics=[], early_stopping=True, grad_eps=eps, var_eps=eps, f_eps=eps*eps):
 
         self.name = self.__class__.__name__
         self.p = p
@@ -31,6 +31,7 @@ class Optimizer(object):
         self.early_stopping = early_stopping
         self.grad_eps = grad_eps
         self.var_eps = var_eps
+        self.f_eps = f_eps
         self.is_initialized = False
 
         if W is not None:
@@ -194,22 +195,33 @@ class Optimizer(object):
         else:
             x = self.x
 
-        grad_norm = norm(self.p.grad(x))
-        if grad_norm < self.grad_eps:
-            log.info('Gradient norm converged')
-            return True
-        elif grad_norm > 100:
-            log.info('Gradient norm diverged')
-            return True
+        if self.grad_eps is not None:
+            grad_norm = norm(self.p.grad(x))
+            if grad_norm < self.grad_eps:
+                log.info('Gradient norm converged')
+                return True
+            elif grad_norm > 100 * self.p.dim:
+                log.info('Gradient norm diverged')
+                return True
 
-        if self.p.x_min is not None:
+        if self.p.x_min is not None and self.var_eps is not None:
             distance = norm(x - self.p.x_min) / norm(self.p.x_min)
             if distance < self.var_eps:
                 log.info('Variable converged')
                 return True
 
-            if distance > self.p.dim:
+            if distance > 100:
                 log.info('Variable diverged')
+                return True
+
+        if self.p.f_min is not None and self.f_eps is not None:
+            distance = np.abs(self.p.f(x) / self.p.f_min - 1)
+            if distance < self.f_eps:
+                log.info('Function value converged')
+                return True
+
+            if distance > 100:
+                log.info('Function value diverged')
                 return True
 
         return False
