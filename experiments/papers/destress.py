@@ -11,12 +11,7 @@ from nda.optimizers import *
 from nda.optimizers.utils import generate_mixing_matrix
 from nda.experiment_utils import run_exp
 
-import tikzplotlib
 import time
-
-from utils import patch
-
-patch()
 
 def plot_exp(exps, configs, filename, dim, n_agent, logx=False, logy=False):
 
@@ -89,10 +84,6 @@ def plot_exp(exps, configs, filename, dim, n_agent, logx=False, logy=False):
         legends.append(name + ','.join([k + '=' + str(v) for k, v in config.items() if k in ['gamma', 'compressor_param', 'compressor_type', 'eta', 'batch_size']]))
 
     plt.legend(legends)
-
-    # plt.show()
-    # tikzplotlib.save("data/privacy-%s.tex" % topology, standalone=True, externalize_tables=True, override_externals=True)
-
 
 
 def plot_gisette_exp(exps, topology, total_samples):
