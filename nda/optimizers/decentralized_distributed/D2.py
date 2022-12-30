@@ -5,8 +5,9 @@ try:
 except ImportError:
     import numpy as xp
 
-from nda.optimizers import Optimizer
+import numpy as np
 
+from nda.optimizers import Optimizer
 
 class D2(Optimizer):
     '''D2: Decentralized Training over Decentralized Data, https://arxiv.org/abs/1803.07068'''
