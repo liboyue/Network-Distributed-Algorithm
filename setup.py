@@ -14,7 +14,7 @@ AUTHOR = 'Boyue Li'
 VERSION = '0.2'
 
 # What packages are required for this module to be executed?
-REQUIRED = ['matplotlib', 'numpy', 'networkx', 'cvxpy', 'pandas', 'scipy', 'sklearn', 'colorlog']
+REQUIRED = ['matplotlib', 'numpy', 'networkx', 'cvxpy', 'pandas', 'scipy', 'scikit-learn', 'colorlog']
 EXTRAS = {'GPU': ['cupy']}
 
 # The rest you shouldn't have to touch too much :)
