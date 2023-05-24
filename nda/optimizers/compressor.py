@@ -32,10 +32,10 @@ def random(x, a):
         return x
     if x.ndim == 2:
         for i in range(x.shape[1]):
-            zero_mask = xp.random.choice(dim, a, replace=False)
+            zero_mask = xp.random.choice(dim, dim - a, replace=False)
             x[zero_mask, i] = 0
     else:
-        zero_mask = xp.random.choice(dim, a, replace=False)
+        zero_mask = xp.random.choice(dim, dim - a, replace=False)
         x[zero_mask] = 0
     return x
 
